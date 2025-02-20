@@ -1,0 +1,57 @@
+ 
+name: RGCCR Notice Checker
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"  # Runs every 6 hours
+  workflow_dispatch:  # Allows manual trigger
+
+jobs:
+  check_notices:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set Up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Backup Previous Notices
+        run: |
+          mkdir -p data
+          cp data/previous_notices.txt data/previous_notices_backup.txt || echo "No previous notice file"
+
+      - name: Run Notice Checker
+        run: python RGCCR_Notice_Check.py
+        env:
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+
+      - name: Commit and Push Notice Cache
+        run: |
+          git config --global user.name 'github-actions'
+          git config --global user.email 'github-actions@github.com'
+          git add data/previous_notices.txt
+          git commit -m "Update cached notice section" || exit 0
+          git push
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+
+      - name: Send Error Log via Email (if any error)
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_SENDER }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          to: ${{ secrets.EMAIL_RECEIVER }}
+          subject: "❌ RGCCR Notice Check Failed!"
+          body: "An error occurred during the GitHub Actions run. Please check the logs."
