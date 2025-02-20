@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Ensures the entire history is fetched
 
       - name: Set Up Python
         uses: actions/setup-python@v4
@@ -40,6 +42,9 @@ jobs:
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
           git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/RGCCR_Notice_Check.git
+          
+          git pull --rebase origin main  # Pull latest changes to avoid conflicts
+          
           git add data/previous_notices.txt
           git commit -m "Update cached notice section" || exit 0
           git push origin main
@@ -55,6 +60,6 @@ jobs:
           username: ${{ secrets.EMAIL_SENDER }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           to: ${{ secrets.EMAIL_RECEIVER }}
-          from: "RGCCR Notice Bot <${{ secrets.EMAIL_SENDER }}>"  # FIXED: Added sender name
+          from: "RGCCR Notice Bot <${{ secrets.EMAIL_SENDER }}>"
           subject: "❌ RGCCR Notice Check Failed!"
           body: "An error occurred during the GitHub Actions run.\n\nCheck the logs for details: https://github.com/MrBadasss/RGCCR_Notice_Check/actions"
