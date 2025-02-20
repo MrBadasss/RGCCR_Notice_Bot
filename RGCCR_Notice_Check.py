@@ -15,7 +15,7 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
 EMAIL_SENDER_NAME = "RGCCR Notice Bot"
 
-NOTICE_URL = "https://rgccr.edu.bd/notice-board"  # Change if needed
+NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"  # Change if needed
 CACHE_FILE = "data/previous_notices.txt"
 
 def fetch_notices():
