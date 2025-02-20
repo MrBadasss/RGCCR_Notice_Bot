@@ -13,7 +13,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch full history to avoid conflicts
+          fetch-depth: 0  # Ensures the full commit history is fetched to avoid conflicts
 
       - name: Set Up Python
         uses: actions/setup-python@v4
@@ -42,17 +42,16 @@ jobs:
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
           git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/RGCCR_Notice_Check.git
-
-          # Fetch latest changes and merge them before committing
+          
+          # Ensure the latest remote changes are incorporated
           git fetch origin main
-          git checkout main
-          git pull origin main --rebase  # Ensures local changes are applied cleanly
-
+          git reset --hard origin/main  # Forcefully sync local branch with remote
+          
           git add data/previous_notices.txt
           git commit -m "Update cached notice section" || exit 0
           
-          # Push changes after merging updates
-          git push origin main
+          # Push the changes, forcing an update if necessary
+          git push origin main --force
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
 
