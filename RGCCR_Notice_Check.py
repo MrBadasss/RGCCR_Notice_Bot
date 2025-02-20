@@ -17,6 +17,7 @@ EMAIL_SENDER_NAME = "RGCCR Notice Bot"
 
 NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"
 CACHE_FILE = "data/previous_notices.txt"
+NOTICE_LIMIT = 10  # Only keep track of the latest 10 notices
 
 def fetch_notices():
     """Fetches all notices from the website."""
@@ -59,7 +60,7 @@ def read_cached_notices():
         return file.read().splitlines()
 
 def write_cache(notices):
-    """Writes the latest notices to the cache file."""
+    """Writes all notices to cache, but email will only contain the latest 10."""
     with open(CACHE_FILE, "w", encoding="utf-8") as file:
         file.write("\n".join(notices))
 
@@ -85,22 +86,30 @@ def log_error(error_message):
     print(f"❌ Error: {error_message}")
     send_email("RGCCR Notice Check Error", f"An error occurred:\n{error_message}")
 
+def format_notices_for_email(notices):
+    """Formats the latest 10 notices with indexing for email."""
+    formatted_notices = "\n".join([f"{i+1}. {notice}" for i, notice in enumerate(notices[:NOTICE_LIMIT])])
+    return formatted_notices
+
 def main():
     """Main script execution."""
     print("🔄 Checking for new notices...")
-    new_notices = fetch_notices()
+    all_new_notices = fetch_notices()
     cached_notices = read_cached_notices()
 
-    if not new_notices:
+    if not all_new_notices:
         log_error("No notices found on the website.")
         return
 
-    if new_notices != cached_notices:
+    # If new notices are different from cached, update and notify
+    if all_new_notices != cached_notices:
         print("✅ New notices found!")
-        write_cache(new_notices)
+        write_cache(all_new_notices)  # Store all notices for tracking
 
-        notice_list = "\n".join(new_notices)
-        send_email("📢 RGCCR Notice Update", f"New notices detected:\n\n{notice_list}")
+        latest_notices = all_new_notices[:NOTICE_LIMIT]  # Only the latest 10 for notification
+        formatted_email_body = format_notices_for_email(latest_notices)
+
+        send_email("📢 RGCCR Notice Update", f"New notices detected:\n\n{formatted_email_body}")
     else:
         print("✅ No new notices detected.")
 
