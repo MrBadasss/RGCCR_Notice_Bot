@@ -55,5 +55,6 @@ jobs:
           username: ${{ secrets.EMAIL_SENDER }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           to: ${{ secrets.EMAIL_RECEIVER }}
+          from: "RGCCR Notice Bot <${{ secrets.EMAIL_SENDER }}>"  # FIXED: Added sender name
           subject: "❌ RGCCR Notice Check Failed!"
           body: "An error occurred during the GitHub Actions run.\n\nCheck the logs for details: https://github.com/MrBadasss/RGCCR_Notice_Check/actions"
