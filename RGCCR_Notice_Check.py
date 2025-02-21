@@ -11,7 +11,6 @@ from aiosmtplib import SMTP
 # Load environment variables
 load_dotenv()
 
-# Use existing variables for easy setup
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 EMAIL_RECEIVERS = os.getenv("EMAIL_RECEIVERS").split(",")
@@ -23,14 +22,15 @@ TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS").split(",")
 NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"
 LATEST_NOTICE_FILE = "data/latest_notice.txt"
 LOG_FILE = "data/error.log"
-NOTICE_LIMIT = 10  # Fetch only the latest 10 notices
+NOTICE_LIMIT = 10  # Fetch latest 10 notices
+EMAIL_NOTICE_LIMIT = 7  # Include last 5 notices in email
 
 os.makedirs("data", exist_ok=True)
 logging.basicConfig(filename=LOG_FILE, level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 async def fetch_latest_notices():
-    """Fetch only the latest notices (to optimize processing)."""
+    """Fetch the latest notices from the website."""
     async with aiohttp.ClientSession() as session:
         async with session.get(NOTICE_URL, timeout=5) as response:
             if response.status != 200:
@@ -74,7 +74,7 @@ async def write_latest_notice(latest_notice_id):
 
 
 async def send_email(subject, notices):
-    """Send email notification with the new notices."""
+    """Send email notification with the last 5 notices."""
     try:
         msg = MIMEMultipart()
         msg["From"] = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER}>"
@@ -84,12 +84,12 @@ async def send_email(subject, notices):
         # Create an HTML email body with a "View" button
         email_body = """
         <html><body>
-        <h3>📢 New Notices:</h3>
+        <h3>📢 New Notices (Last 5):</h3>
         <table border="1" cellspacing="0" cellpadding="5">
         <tr><th>#</th><th>Date</th><th>Title</th><th>Link</th></tr>
         """
 
-        for i, (date, title, link) in enumerate(notices):
+        for i, (date, title, link) in enumerate(notices[:EMAIL_NOTICE_LIMIT]):
             view_button = (
                 f'<a href="{link}" target="_blank" style="text-decoration:none;">'
                 f'<button style="padding:5px 10px;background-color:#007BFF;color:white;border:none;border-radius:5px;">View</button></a>'
@@ -112,22 +112,22 @@ async def send_email(subject, notices):
         print(f"❌ Failed to send email: {e}")
 
 
-def escape_markdown(text):
-    """Escape Markdown characters for Telegram"""
+def escape_markdown_v2(text):
+    """Escape special MarkdownV2 characters for Telegram messages."""
     escape_chars = r'_*[]()~`>#+-=|{}.!'
     return "".join(f"\\{c}" if c in escape_chars else c for c in text)
 
 
 async def send_telegram_messages(notices):
-    """Send a Telegram message to multiple chat IDs."""
+    """Send a Telegram message to multiple chat IDs with fixed MarkdownV2 escaping."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
-    message = "📢 *New Notices:*\n\n"
+    message = "📢 *New Notices (Last 5):*\n\n"
 
-    for date, title, link in notices:
-        escaped_title = escape_markdown(title)
-        escaped_date = escape_markdown(date)
-        escaped_link = escape_markdown(link) if link != "No link" else "No link"
+    for date, title, link in notices[:EMAIL_NOTICE_LIMIT]:
+        escaped_title = escape_markdown_v2(title)
+        escaped_date = escape_markdown_v2(date)
+        escaped_link = escape_markdown_v2(link) if link != "No link" else "No link"
 
         if link != "No link":
             message += f"📌 *{escaped_date}* - [{escaped_title}]({escaped_link})\n"
@@ -161,12 +161,11 @@ async def main():
 
     if last_stored_notice_id != latest_notice_id:
         print("✅ New notice detected!")
-        new_notices.append(latest_notices[0])  # Store only the latest new notice
         await write_latest_notice(latest_notice_id)  # Update stored notice
 
-        # Send notifications
-        await send_email("📢 Notice Update", new_notices)
-        await send_telegram_messages(new_notices)
+        # Send notifications with the last 5 notices
+        await send_email("📢 Notice Update", latest_notices[:EMAIL_NOTICE_LIMIT])
+        await send_telegram_messages(latest_notices[:EMAIL_NOTICE_LIMIT])
     else:
         print("✅ No new notices detected.")
 
