@@ -2,7 +2,7 @@ name: RGCCR Notice Checker
 
 on:
   schedule:
-    - cron: "0 */1 * * *"  # Runs every 1 hour
+    - cron: "0 */6 * * *"  # Runs every 6 hour
   workflow_dispatch:  # Allows manual trigger
 
 jobs:
