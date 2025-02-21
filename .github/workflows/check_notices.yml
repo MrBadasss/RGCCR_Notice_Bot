@@ -13,9 +13,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 1  # Fetch only the latest commit
+          fetch-depth: 0  # Fetch full history to avoid conflicts
 
-      - name: Cache Dependencies
+      - name: Set Up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Cache Python Dependencies
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
@@ -23,15 +28,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Set Up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: Backup Previous Notices
+        run: |
+          mkdir -p data
+          cp data/previous_notices.txt data/previous_notices_backup.txt || echo "No previous notice file"
 
       - name: Run Notice Checker
         run: python RGCCR_Notice_Check.py
@@ -46,25 +51,25 @@ jobs:
           git config --global user.email 'github-actions@github.com'
           git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/RGCCR_Notice_Check.git
 
-          # Ensure latest changes are pulled before committing
+          # Ensure we have the latest remote changes to avoid conflicts
           git fetch origin main
           git checkout main
 
-          # Stash local changes if any before pulling
+          # Stash local changes before pulling
           git add -A
-          git stash --include-untracked || echo "No changes to stash"
+          git stash --include-untracked
 
           # Pull latest changes
-          git pull origin main --rebase || (git rebase --abort && git pull --no-rebase)
+          git pull origin main --rebase
 
-          # Apply stashed changes (if any)
+          # Reapply stashed changes
           git stash pop || echo "No stashed changes"
 
-          # Check if file changed before committing
-          git diff --quiet && exit 0
-
-          git add data/previous_notices.txt
-          git commit -m "Update cached notice section"
+          # Force Git to recognize file changes (even if minor)
+          git add -A  
+          git diff-index --quiet HEAD || git commit -m "Update cached notice section"
+          
+          # Push the changes after pulling the latest version
           git push origin main
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
