@@ -26,7 +26,7 @@ NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"
 CACHE_FILE = "data/previous_notices.txt"
 LAST_MODIFIED_FILE = "data/last_modified.txt"
 LOG_FILE = "data/error.log"
-NOTICE_LIMIT = 10  # Latest 10 notices for email notifications
+NOTICE_LIMIT = 10  # Latest 10 notices for email and Telegram
 
 # Ensure required directories exist
 os.makedirs("data", exist_ok=True)
@@ -109,9 +109,18 @@ async def send_email(subject, notices):
         <table border="1" cellspacing="0" cellpadding="5">
         <tr><th>#</th><th>Date</th><th>Title</th><th>Link</th></tr>
         """
-        for notice in notices[:NOTICE_LIMIT]:
+        
+        for i, notice in enumerate(notices[:NOTICE_LIMIT]):
             parts = notice.split(" - ")
-            email_body += f"<tr><td>{parts[0]}</td><td>{parts[1]}</td><td>{parts[2]}</td><td>{parts[3]}</td></tr>"
+            if len(parts) < 3:
+                continue  # Skip notices with missing data
+
+            title = parts[1] if len(parts) > 1 else "N/A"
+            date = parts[0] if len(parts) > 0 else "N/A"
+            link = parts[2] if len(parts) > 2 else "No link"
+
+            email_body += f"<tr><td>{i+1}</td><td>{date}</td><td>{title}</td><td>{link}</td></tr>"
+
         email_body += "</table></body></html>"
 
         msg.attach(MIMEText(email_body, "html"))
@@ -126,16 +135,32 @@ async def send_email(subject, notices):
         print(f"❌ Failed to send email: {e}")
 
 
+def escape_markdown(text):
+    """Escape Markdown special characters for Telegram"""
+    escape_chars = r'_*[]()~`>#+-=|{}.!'
+    return "".join(f"\\{c}" if c in escape_chars else c for c in text)
+
+
 async def send_telegram_messages(notices):
     """Send a Telegram message to multiple chat IDs with formatted notices."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
     message = "📢 *New Notices:*\n\n"
-    message += "\n".join(notices[:NOTICE_LIMIT])
+    
+    for notice in notices[:NOTICE_LIMIT]:
+        parts = notice.split(" - ")
+        if len(parts) < 3:
+            continue  # Skip malformed notices
+        
+        title = escape_markdown(parts[1]) if len(parts) > 1 else "N/A"
+        date = escape_markdown(parts[0]) if len(parts) > 0 else "N/A"
+        link = parts[2] if len(parts) > 2 else "No link"
+
+        message += f"📌 *{date}* - [{title}]({link})\n"
 
     async with aiohttp.ClientSession() as session:
         for chat_id in TELEGRAM_CHAT_IDS:
-            async with session.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}) as response:
+            async with session.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "MarkdownV2"}) as response:
                 resp_json = await response.json()
                 if resp_json.get("ok"):
                     print(f"✅ Sent Telegram message to {chat_id}")
