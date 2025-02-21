@@ -23,7 +23,7 @@ NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"
 LATEST_NOTICE_FILE = "data/latest_notice.txt"
 LOG_FILE = "data/error.log"
 NOTICE_LIMIT = 10  # Fetch latest 10 notices
-EMAIL_NOTICE_LIMIT = 3  # Include last 5 notices in email
+EMAIL_NOTICE_LIMIT = 5  # Include last 5 notices in email and Telegram
 
 os.makedirs("data", exist_ok=True)
 logging.basicConfig(filename=LOG_FILE, level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -74,7 +74,7 @@ async def write_latest_notice(latest_notice_id):
 
 
 async def send_email(subject, notices):
-    """Send email notification with the last 5 notices."""
+    """Send email notification with the last notices based on EMAIL_NOTICE_LIMIT."""
     try:
         msg = MIMEMultipart()
         msg["From"] = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER}>"
@@ -82,9 +82,9 @@ async def send_email(subject, notices):
         msg["Subject"] = subject
 
         # Create an HTML email body with a "View" button
-        email_body = """
+        email_body = f"""
         <html><body>
-        <h3>📢 New Notices (Last 5):</h3>
+        <h3>📢 New Notices (Last {EMAIL_NOTICE_LIMIT}):</h3>
         <table border="1" cellspacing="0" cellpadding="5">
         <tr><th>#</th><th>Date</th><th>Title</th><th>Link</th></tr>
         """
@@ -112,31 +112,21 @@ async def send_email(subject, notices):
         print(f"❌ Failed to send email: {e}")
 
 
-def escape_markdown_v2(text):
-    """Escape special MarkdownV2 characters for Telegram messages."""
-    escape_chars = r'_*[]()~`>#+-=|{}.!'
-    return "".join(f"\\{c}" if c in escape_chars else c for c in text)
-
-
 async def send_telegram_messages(notices):
-    """Send a Telegram message to multiple chat IDs with fixed MarkdownV2 escaping."""
+    """Send a plain text Telegram message to multiple chat IDs."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
-    message = "📢 *New Notices (Last 5):*\n\n"
+    # Generate a simple text message without formatting
+    message = f"📢 New Notices (Last {EMAIL_NOTICE_LIMIT}):\n\n"
 
-    for date, title, link in notices[:EMAIL_NOTICE_LIMIT]:
-        escaped_title = escape_markdown_v2(title)
-        escaped_date = escape_markdown_v2(date)
-        escaped_link = escape_markdown_v2(link) if link != "No link" else "No link"
-
+    for i, (date, title, link) in enumerate(notices[:EMAIL_NOTICE_LIMIT]):
+        message += f"{i+1}. {date} - {title}\n"
         if link != "No link":
-            message += f"📌 *{escaped_date}* - [{escaped_title}]({escaped_link})\n"
-        else:
-            message += f"📌 *{escaped_date}* - {escaped_title} (No link)\n"
+            message += f"   🔗 {link}\n"
 
     async with aiohttp.ClientSession() as session:
         for chat_id in TELEGRAM_CHAT_IDS:
-            async with session.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "MarkdownV2"}) as response:
+            async with session.post(url, json={"chat_id": chat_id, "text": message}) as response:
                 resp_json = await response.json()
                 if resp_json.get("ok"):
                     print(f"✅ Sent Telegram message to {chat_id}")
@@ -154,7 +144,6 @@ async def main():
         return
 
     last_stored_notice_id = await read_latest_notice()
-    new_notices = []
 
     # Compare only the latest notice
     latest_notice_id = latest_notices[0][1]  # Use the title as the unique identifier
@@ -163,7 +152,7 @@ async def main():
         print("✅ New notice detected!")
         await write_latest_notice(latest_notice_id)  # Update stored notice
 
-        # Send notifications with the last 5 notices
+        # Send notifications with the last EMAIL_NOTICE_LIMIT notices
         await send_email("📢 Notice Update", latest_notices[:EMAIL_NOTICE_LIMIT])
         await send_telegram_messages(latest_notices[:EMAIL_NOTICE_LIMIT])
     else:
