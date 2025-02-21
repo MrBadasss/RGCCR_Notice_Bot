@@ -2,7 +2,7 @@ name: RGCCR Notice Checker
 
 on:
   schedule:
-    - cron: "0 */1 * * *"  # Runs every hour
+    - cron: "0 */1 * * *"  # Runs every 1 hour
   workflow_dispatch:  # Allows manual trigger
 
 jobs:
@@ -29,12 +29,12 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir --upgrade -r requirements.txt || echo "Using cached dependencies"
+          pip install --no-cache-dir -r requirements.txt
 
       - name: Backup Previous Notices
         run: |
           mkdir -p data
-          cp data/latest_notice.txt data/latest_notice_backup.txt || echo "No previous notice file found"
+          cp data/previous_notices.txt data/previous_notices_backup.txt || echo "No previous notice file"
 
       - name: Run Notice Checker
         run: python RGCCR_Notice_Check.py
@@ -51,27 +51,26 @@ jobs:
           git config --global user.email 'github-actions@github.com'
           git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/RGCCR_Notice_Check.git
 
-          # Fetch the latest changes before committing to avoid conflicts
+          # Ensure we have the latest remote changes to avoid conflicts
           git fetch origin main
           git checkout main
 
-          # Ensure local changes are not lost
+          # Stash local changes before pulling
           git add -A
-          git stash --include-untracked || echo "No changes to stash"
+          git stash --include-untracked
 
-          # Pull the latest changes from main branch
+          # Pull latest changes
           git pull origin main --rebase
 
-          # Reapply stashed changes if any
+          # Reapply stashed changes
           git stash pop || echo "No stashed changes"
 
-          # Check if any new changes need to be committed
-          if ! git diff --cached --quiet; then
-            git commit -m "Update cached notice section"
-            git push origin main
-          else
-            echo "No changes to commit"
-          fi
+          # Force Git to recognize file changes (even if minor)
+          git add -A  
+          git diff-index --quiet HEAD || git commit -m "Update cached notice section"
+          
+          # Push the changes after pulling the latest version
+          git push origin main
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
 
