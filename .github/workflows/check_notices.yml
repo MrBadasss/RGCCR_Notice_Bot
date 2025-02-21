@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Cache Python Dependencies
+      - name: Cache Dependencies
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
@@ -31,7 +31,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir -r requirements.txt
+          pip install --disable-pip-version-check --no-input --prefer-binary --cache-dir ~/.cache/pip -r requirements.txt
 
       - name: Backup Previous Notices
         run: |
@@ -51,26 +51,22 @@ jobs:
           git config --global user.email 'github-actions@github.com'
           git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/RGCCR_Notice_Check.git
 
-          # Ensure we have the latest remote changes to avoid conflicts
           git fetch origin main
           git checkout main
 
-          # Stash local changes before pulling
-          git add -A
-          git stash --include-untracked
+          if ! git diff --quiet; then
+            git stash --include-untracked
+            git pull origin main --ff-only
+            git stash pop || echo "No stashed changes"
+          else
+            git pull origin main --ff-only
+          fi
 
-          # Pull latest changes
-          git pull origin main --rebase
-
-          # Reapply stashed changes
-          git stash pop || echo "No stashed changes"
-
-          # Force Git to recognize file changes (even if minor)
-          git add -A  
-          git diff-index --quiet HEAD || git commit -m "Update cached notice section"
-          
-          # Push the changes after pulling the latest version
-          git push origin main
+          if ! git diff --quiet; then
+            git add -A  
+            git commit -m "Update cached notice section"
+            git push origin main
+          fi
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
 
@@ -85,4 +81,4 @@ jobs:
           to: ${{ secrets.EMAIL_RECEIVER }}
           from: "RGCCR Notice Bot <${{ secrets.EMAIL_SENDER }}>"
           subject: "❌ RGCCR Notice Check Failed!"
-          body: "An error occurred during the GitHub Actions run.\n\nCheck the logs for details: https://github.com/MrBadasss/RGCCR_Notice_Check/actions"
+          body: "An error occurred during the GitHub Actions run."
