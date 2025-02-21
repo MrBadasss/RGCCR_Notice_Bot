@@ -1,3 +1,4 @@
 
 2025-02-21 11:08:20,395 - ERROR - ❌ Failed to send email: SMTP.__init__() takes 1 positional argument but 2 positional arguments (and 2 keyword-only arguments) were given
 2025-02-21 11:10:39,002 - ERROR - ❌ Failed to send email: SMTP.__init__() takes 1 positional argument but 2 positional arguments (and 2 keyword-only arguments) were given
+2025-02-21 11:36:45,500 - ERROR - ❌ Failed to send email: list index out of range
