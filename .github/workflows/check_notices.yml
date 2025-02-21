@@ -1,4 +1,4 @@
-name: Notice Board Bot
+name: RGCCR Notice Checker
 
 on:
   schedule:
@@ -12,16 +12,21 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # Fetch full history to avoid conflicts
 
       - name: Set Up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
-          cache: "pip"  # Caches dependencies for faster installs
 
-      - name: Install Dependencies (Cached)
+      - name: Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install --no-cache-dir -r requirements.txt
@@ -36,7 +41,7 @@ jobs:
         env:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+          EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
 
@@ -44,7 +49,7 @@ jobs:
         run: |
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
-          git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/Notice_Board_Bot.git
+          git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/RGCCR_Notice_Check.git
 
           # Ensure we have the latest remote changes to avoid conflicts
           git fetch origin main
@@ -77,7 +82,7 @@ jobs:
           server_port: 465
           username: ${{ secrets.EMAIL_SENDER }}
           password: ${{ secrets.EMAIL_PASSWORD }}
-          to: ${{ secrets.EMAIL_RECEIVER }}
-          from: "Notice Board Bot <${{ secrets.EMAIL_SENDER }}>"
-          subject: "❌ Notice Board Bot Failed!"
-          body: "An error occurred during the GitHub Actions run.\n\nCheck the logs for details: https://github.com/MrBadasss/Notice_Board_Bot/actions"
+          to: ${{ secrets.EMAIL_RECEIVERS }}
+          from: "RGCCR Notice Bot <${{ secrets.EMAIL_SENDER }}>"
+          subject: "❌ RGCCR Notice Check Failed!"
+          body: "An error occurred during the GitHub Actions run.\n\nCheck the logs for details: https://github.com/MrBadasss/RGCCR_Notice_Check/actions"
