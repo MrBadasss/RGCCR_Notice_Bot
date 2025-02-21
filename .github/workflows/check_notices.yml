@@ -1,4 +1,4 @@
-name: RGCCR Notice Checker
+name: Notice Board Bot
 
 on:
   schedule:
@@ -19,19 +19,12 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
+          cache: "pip"  # Caches dependencies for faster installs
 
-      - name: Cache Dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-
-      - name: Install Dependencies
+      - name: Install Dependencies (Cached)
         run: |
           python -m pip install --upgrade pip
-          pip install --disable-pip-version-check --no-input --prefer-binary --cache-dir ~/.cache/pip -r requirements.txt
+          pip install --no-cache-dir -r requirements.txt
 
       - name: Backup Previous Notices
         run: |
@@ -44,29 +37,35 @@ jobs:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
           EMAIL_RECEIVER: ${{ secrets.EMAIL_RECEIVER }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
 
       - name: Commit and Push Notice Cache
         run: |
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
-          git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/RGCCR_Notice_Check.git
+          git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/Notice_Board_Bot.git
 
+          # Ensure we have the latest remote changes to avoid conflicts
           git fetch origin main
           git checkout main
 
-          if ! git diff --quiet; then
-            git stash --include-untracked
-            git pull origin main --ff-only
-            git stash pop || echo "No stashed changes"
-          else
-            git pull origin main --ff-only
-          fi
+          # Stash local changes before pulling
+          git add -A
+          git stash --include-untracked
 
-          if ! git diff --quiet; then
-            git add -A  
-            git commit -m "Update cached notice section"
-            git push origin main
-          fi
+          # Pull latest changes
+          git pull origin main --rebase
+
+          # Reapply stashed changes
+          git stash pop || echo "No stashed changes"
+
+          # Force Git to recognize file changes (even if minor)
+          git add -A  
+          git diff-index --quiet HEAD || git commit -m "Update cached notice section"
+          
+          # Push the changes after pulling the latest version
+          git push origin main
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
 
@@ -79,6 +78,6 @@ jobs:
           username: ${{ secrets.EMAIL_SENDER }}
           password: ${{ secrets.EMAIL_PASSWORD }}
           to: ${{ secrets.EMAIL_RECEIVER }}
-          from: "RGCCR Notice Bot <${{ secrets.EMAIL_SENDER }}>"
-          subject: "❌ RGCCR Notice Check Failed!"
-          body: "An error occurred during the GitHub Actions run."
+          from: "Notice Board Bot <${{ secrets.EMAIL_SENDER }}>"
+          subject: "❌ Notice Board Bot Failed!"
+          body: "An error occurred during the GitHub Actions run.\n\nCheck the logs for details: https://github.com/MrBadasss/Notice_Board_Bot/actions"
