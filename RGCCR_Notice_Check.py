@@ -53,17 +53,26 @@ async def fetch_notices():
                 return None, None
 
             response_text = await response.text()
-
             soup = BeautifulSoup(response_text, "html.parser")
             notice_table = soup.select_one("table.table-striped")
 
             if not notice_table:
                 raise ValueError("❌ Notice table not found!")
 
-            extracted_notices = [
-                f"{row.find_all('td')[1].text.strip()} - {row.find_all('td')[0].text.strip()} - {row.find_all('td')[2].find('a')['href'] if row.find_all('td')[2].find('a') else 'No link'}"
-                for row in notice_table.select("tbody tr") if len(row.find_all('td')) >= 3
-            ]
+            extracted_notices = []
+            for i, row in enumerate(notice_table.select("tbody tr")):
+                cols = row.find_all("td")
+                if len(cols) < 3:
+                    continue  # Skip invalid rows
+
+                title = cols[0].text.strip()
+                date = cols[1].text.strip()
+                link_tag = cols[2].find("a")
+                link = link_tag["href"] if link_tag else "No link"
+
+                # Ensure Bangla URLs are clickable
+                formatted_link = f'<a href="{link}" target="_blank">{link}</a>' if link != "No link" else "No link"
+                extracted_notices.append(f"{i+1}. {date} - {title} - {formatted_link}")
 
             return extracted_notices if extracted_notices else [], response.headers.get("Last-Modified")
 
@@ -85,14 +94,27 @@ async def write_cache(notices):
         file.write("\n".join(notices))
 
 
-async def send_email(subject, body):
+async def send_email(subject, notices):
     """Sends an email notification asynchronously to multiple recipients."""
     try:
         msg = MIMEMultipart()
         msg["From"] = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER}>"
         msg["To"] = ", ".join(EMAIL_RECEIVERS)
         msg["Subject"] = subject
-        msg.attach(MIMEText(body, "html"))
+
+        # Format the email body with an HTML table
+        email_body = """
+        <html><body>
+        <h3>📢 New Notices:</h3>
+        <table border="1" cellspacing="0" cellpadding="5">
+        <tr><th>#</th><th>Date</th><th>Title</th><th>Link</th></tr>
+        """
+        for notice in notices[:NOTICE_LIMIT]:
+            parts = notice.split(" - ")
+            email_body += f"<tr><td>{parts[0]}</td><td>{parts[1]}</td><td>{parts[2]}</td><td>{parts[3]}</td></tr>"
+        email_body += "</table></body></html>"
+
+        msg.attach(MIMEText(email_body, "html"))
 
         async with SMTP(hostname="smtp.gmail.com", port=465, use_tls=True) as smtp:
             await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
@@ -104,13 +126,16 @@ async def send_email(subject, body):
         print(f"❌ Failed to send email: {e}")
 
 
-async def send_telegram_messages(message):
-    """Send a Telegram message to multiple chat IDs in one request."""
+async def send_telegram_messages(notices):
+    """Send a Telegram message to multiple chat IDs with formatted notices."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+
+    message = "📢 *New Notices:*\n\n"
+    message += "\n".join(notices[:NOTICE_LIMIT])
 
     async with aiohttp.ClientSession() as session:
         for chat_id in TELEGRAM_CHAT_IDS:
-            async with session.post(url, json={"chat_id": chat_id, "text": message}) as response:
+            async with session.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}) as response:
                 resp_json = await response.json()
                 if resp_json.get("ok"):
                     print(f"✅ Sent Telegram message to {chat_id}")
@@ -139,12 +164,8 @@ async def main():
         print("✅ Changes detected!")
         await write_cache(all_new_notices)
 
-        email_body = "<br>".join([f"{i+1}. {notice}" for i, notice in enumerate(new_notices[:NOTICE_LIMIT])])
-        await send_email("📢 Notice Update", email_body)
-
-        telegram_message = "\n".join(new_notices[:NOTICE_LIMIT])
-        await send_telegram_messages(telegram_message)
-
+        await send_email("📢 Notice Update", new_notices)
+        await send_telegram_messages(new_notices)
     else:
         print("✅ No new notices detected.")
 
