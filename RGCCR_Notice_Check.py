@@ -23,7 +23,7 @@ NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"
 LATEST_NOTICE_FILE = "data/latest_notice.txt"
 LOG_FILE = "data/error.log"
 NOTICE_LIMIT = 10  # Fetch latest 10 notices
-EMAIL_NOTICE_LIMIT = 7  # Include last 5 notices in email
+EMAIL_NOTICE_LIMIT = 3  # Include last 5 notices in email
 
 os.makedirs("data", exist_ok=True)
 logging.basicConfig(filename=LOG_FILE, level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
