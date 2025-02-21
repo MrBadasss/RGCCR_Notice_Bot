@@ -46,10 +46,19 @@ jobs:
           git config --global user.email 'github-actions@github.com'
           git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/RGCCR_Notice_Check.git
 
-          # Fetch latest changes to avoid conflicts
+          # Ensure latest changes are pulled before committing
           git fetch origin main
           git checkout main
-          git pull origin main --rebase
+
+          # Stash local changes if any before pulling
+          git add -A
+          git stash --include-untracked || echo "No changes to stash"
+
+          # Pull latest changes
+          git pull origin main --rebase || (git rebase --abort && git pull --no-rebase)
+
+          # Apply stashed changes (if any)
+          git stash pop || echo "No stashed changes"
 
           # Check if file changed before committing
           git diff --quiet && exit 0
