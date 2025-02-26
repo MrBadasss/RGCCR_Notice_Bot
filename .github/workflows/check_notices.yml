@@ -2,7 +2,7 @@ name: RGCCR Notice Checker
 
 on:
   schedule:
-    - cron: "0 */6 * * *"  # Runs every 6 hour
+    - cron: "0 */6 * * *"  # Runs every 6 hours
   workflow_dispatch:  # Allows manual trigger
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir -r requirements.txt
+          pip install -r requirements.txt  # Removed --no-cache-dir
 
       - name: Backup Previous Notices
         run: |
@@ -50,26 +50,10 @@ jobs:
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
           git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/RGCCR_Notice_Check.git
-
-          # Ensure we have the latest remote changes to avoid conflicts
           git fetch origin main
           git checkout main
-
-          # Stash local changes before pulling
           git add -A
-          git stash --include-untracked
-
-          # Pull latest changes
-          git pull origin main --rebase
-
-          # Reapply stashed changes
-          git stash pop || echo "No stashed changes"
-
-          # Force Git to recognize file changes (even if minor)
-          git add -A  
           git diff-index --quiet HEAD || git commit -m "Update cached notice section"
-          
-          # Push the changes after pulling the latest version
           git push origin main
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
