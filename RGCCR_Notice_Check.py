@@ -73,7 +73,7 @@ async def send_email(subject, notices):
 
         email_body = f"""
         <html><body>
-        <h3>📢 There are {len(notices)} new notices:</h3>
+        <h3>📢 New notice count: {len(notices)}</h3>
         <table border="1" cellspacing="0" cellpadding="5">
         <tr><th>#</th><th>Date</th><th>Title</th><th>Link</th></tr>
         """
