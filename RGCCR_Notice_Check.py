@@ -14,7 +14,7 @@ load_dotenv()
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 EMAIL_RECEIVERS = os.getenv("EMAIL_RECEIVERS").split(",")
-EMAIL_SENDER_NAME = "Notice Bot"
+EMAIL_SENDER_NAME = "RGCCR Notice Bot"
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS").split(",")
