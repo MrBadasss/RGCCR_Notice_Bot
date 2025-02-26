@@ -22,12 +22,11 @@ TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS").split(",")
 NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"
 LATEST_NOTICE_FILE = "data/latest_notice.txt"
 LOG_FILE = "data/error.log"
-NOTICE_LIMIT = 10  # Fetch latest 10 notices
-EMAIL_NOTICE_LIMIT = 5  # Include last 5 notices in email and Telegram
+NOTICE_LIMIT = 10  # Fetch up to 10 notices
 
+# Setup directories and logging
 os.makedirs("data", exist_ok=True)
 logging.basicConfig(filename=LOG_FILE, level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
-
 
 async def fetch_latest_notices():
     """Fetch the latest notices from the website."""
@@ -35,69 +34,56 @@ async def fetch_latest_notices():
         async with session.get(NOTICE_URL, timeout=5) as response:
             if response.status != 200:
                 raise ValueError(f"❌ Failed to fetch notices: {response.status}")
-
             soup = BeautifulSoup(await response.text(), "html.parser")
             notice_table = soup.select_one("table.table-striped")
-
             if not notice_table:
                 raise ValueError("❌ Notice table not found!")
-
+            
             notices = []
-            for row in notice_table.select("tbody tr")[:NOTICE_LIMIT]:  # Limit to first 10 notices
+            for row in notice_table.select("tbody tr")[:NOTICE_LIMIT]:
                 cols = row.find_all("td")
                 if len(cols) < 3:
-                    continue  # Skip invalid rows
-
+                    continue
                 title = cols[0].text.strip()
                 date = cols[1].text.strip()
                 link_tag = cols[2].find("a")
                 link = link_tag["href"] if link_tag else "No link"
-
                 notices.append((date, title, link))
-
             return notices
 
-
 async def read_latest_notice():
-    """Reads the last stored notice ID (title)."""
+    """Read the last stored notice title from file."""
     if not os.path.exists(LATEST_NOTICE_FILE):
         return None
-
     with open(LATEST_NOTICE_FILE, "r") as file:
         return file.read().strip()
 
-
 async def write_latest_notice(latest_notice_id):
-    """Stores the latest notice ID (title)."""
+    """Write the latest notice title to file."""
     with open(LATEST_NOTICE_FILE, "w") as file:
         file.write(latest_notice_id)
 
-
 async def send_email(subject, notices):
-    """Send email notification with the last notices based on EMAIL_NOTICE_LIMIT."""
+    """Send email with new notices and their count."""
     try:
         msg = MIMEMultipart()
         msg["From"] = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER}>"
         msg["To"] = ", ".join(EMAIL_RECEIVERS)
         msg["Subject"] = subject
 
-        # Create an HTML email body with a "View" button
         email_body = f"""
         <html><body>
-        <h3>📢 New Notices (Last {EMAIL_NOTICE_LIMIT}):</h3>
+        <h3>📢 There are {len(notices)} new notices:</h3>
         <table border="1" cellspacing="0" cellpadding="5">
         <tr><th>#</th><th>Date</th><th>Title</th><th>Link</th></tr>
         """
-
-        for i, (date, title, link) in enumerate(notices[:EMAIL_NOTICE_LIMIT]):
+        for i, (date, title, link) in enumerate(notices):
             view_button = (
                 f'<a href="{link}" target="_blank" style="text-decoration:none;">'
                 f'<button style="padding:5px 10px;background-color:#007BFF;color:white;border:none;border-radius:5px;">View</button></a>'
-                if link != "No link"
-                else "No link"
+                if link != "No link" else "No link"
             )
             email_body += f"<tr><td>{i+1}</td><td>{date}</td><td>{title}</td><td>{view_button}</td></tr>"
-
         email_body += "</table></body></html>"
 
         msg.attach(MIMEText(email_body, "html"))
@@ -105,21 +91,16 @@ async def send_email(subject, notices):
         async with SMTP(hostname="smtp.gmail.com", port=465, use_tls=True) as smtp:
             await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
             await smtp.send_message(msg)
-
         print("✅ Email sent successfully!")
     except Exception as e:
         logging.error(f"❌ Failed to send email: {e}")
         print(f"❌ Failed to send email: {e}")
 
-
 async def send_telegram_messages(notices):
-    """Send a plain text Telegram message to multiple chat IDs."""
+    """Send Telegram messages with new notices and their count."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-
-    # Generate a simple text message without formatting
-    message = f"📢 New Notices (Last {EMAIL_NOTICE_LIMIT}):\n\n"
-
-    for i, (date, title, link) in enumerate(notices[:EMAIL_NOTICE_LIMIT]):
+    message = f"📢 There are {len(notices)} new notices:\n\n"
+    for i, (date, title, link) in enumerate(notices):
         message += f"{i+1}. {date} - {title}\n"
         if link != "No link":
             message += f"   🔗 {link}\n"
@@ -133,31 +114,38 @@ async def send_telegram_messages(notices):
                 else:
                     print(f"❌ Failed to send Telegram message to {chat_id}: {resp_json}")
 
-
 async def main():
-    """Main script execution with optimized notice detection."""
+    """Main function to check and notify about new notices."""
     print("🔄 Checking for new notices...")
-    latest_notices = await fetch_latest_notices()
+    try:
+        latest_notices = await fetch_latest_notices()
+        if not latest_notices:
+            print("✅ No notices found on the website.")
+            return
 
-    if not latest_notices:
-        print("✅ No notices found on the website.")
-        return
+        last_stored_notice_id = await read_latest_notice()
+        new_notices = []
+        
+        # If file is blank, all notices are new
+        if last_stored_notice_id is None:
+            new_notices = latest_notices
+        else:
+            # Collect notices until we hit the stored one
+            for notice in latest_notices:
+                if notice[1] == last_stored_notice_id:
+                    break
+                new_notices.append(notice)
 
-    last_stored_notice_id = await read_latest_notice()
-
-    # Compare only the latest notice
-    latest_notice_id = latest_notices[0][1]  # Use the title as the unique identifier
-
-    if last_stored_notice_id != latest_notice_id:
-        print("✅ New notice detected!")
-        await write_latest_notice(latest_notice_id)  # Update stored notice
-
-        # Send notifications with the last EMAIL_NOTICE_LIMIT notices
-        await send_email("📢 Notice Update", latest_notices[:EMAIL_NOTICE_LIMIT])
-        await send_telegram_messages(latest_notices[:EMAIL_NOTICE_LIMIT])
-    else:
-        print("✅ No new notices detected.")
-
+        if new_notices:
+            print(f"✅ Found {len(new_notices)} new notices!")
+            await send_email(f"📢 {len(new_notices)} New Notices", new_notices)
+            await send_telegram_messages(new_notices)
+            await write_latest_notice(latest_notices[0][1])  # Update to newest notice
+        else:
+            print("✅ No new notices detected.")
+    except Exception as e:
+        logging.error(f"❌ Error in main: {e}")
+        print(f"❌ Error occurred: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())
