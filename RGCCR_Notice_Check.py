@@ -91,10 +91,12 @@ async def send_email(subject, notices):
         async with SMTP(hostname="smtp.gmail.com", port=465, use_tls=True) as smtp:
             await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
             await smtp.send_message(msg)
-        print("✅ Email sent successfully!")
+        # Modified success message to include email recipients
+        print(f"✅ Email sent to: {', '.join(EMAIL_RECEIVERS)}")
     except Exception as e:
-        logging.error(f"❌ Failed to send email: {e}")
-        print(f"❌ Failed to send email: {e}")
+        # Modified error message to include intended recipients
+        logging.error(f"❌ Failed to send email to {', '.join(EMAIL_RECEIVERS)}: {e}")
+        print(f"❌ Failed to send email to {', '.join(EMAIL_RECEIVERS)}: {e}")
 
 async def send_telegram_messages(notices):
     """Send Telegram messages with new notices and their count."""
