@@ -20,8 +20,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS").split(",")
 
 NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"
-LATEST_NOTICE_FILE = "data/latest_notice.txt"
-SENT_NOTICES_FILE = "data/sent_notices.txt"
+LAST_NOTICE_FILE = "data/last_notice.txt"
 LOG_FILE = "data/error.log"
 
 os.makedirs("data", exist_ok=True)
@@ -57,19 +56,19 @@ async def fetch_latest_notices():
             return notices
 
 
-async def read_sent_notices():
-    """Reads the titles of sent notices."""
-    if not os.path.exists(SENT_NOTICES_FILE):
-        return set()  # Return an empty set if no file exists
+async def read_last_notice():
+    """Reads the last sent notice title."""
+    if not os.path.exists(LAST_NOTICE_FILE):
+        return None  # Return None if no file exists
 
-    with open(SENT_NOTICES_FILE, "r") as file:
-        return set(file.read().strip().splitlines())
+    with open(LAST_NOTICE_FILE, "r") as file:
+        return file.read().strip()
 
 
-async def write_sent_notices(sent_notices):
-    """Stores the titles of sent notices."""
-    with open(SENT_NOTICES_FILE, "w") as file:
-        file.write("\n".join(sent_notices))
+async def write_last_notice(last_notice):
+    """Stores the last sent notice title."""
+    with open(LAST_NOTICE_FILE, "w") as file:
+        file.write(last_notice)
 
 
 async def send_email(subject, notices):
@@ -141,22 +140,23 @@ async def main():
         print("✅ No notices found on the website.")
         return
 
-    sent_notices = await read_sent_notices()
+    last_sent_notice_title = await read_last_notice()
 
+    # Filter for new notices
     new_notices = []
     for notice in latest_notices:
         title = notice[1]
-        if title not in sent_notices:  # Check if the notice is new
-            new_notices.append(notice)
+        if last_sent_notice_title is None or title == last_sent_notice_title:
+            break  # Stop at the last sent notice
+        new_notices.append(notice)
 
     if new_notices:
         print("✅ New notices detected!")
         await send_email("📢 Notice Update", new_notices)
         await send_telegram_messages(new_notices)
 
-        # Update the sent notices list
-        sent_notices.update(title for _, title, _ in new_notices)
-        await write_sent_notices(sent_notices)
+        # Update the last notice with the most recent one sent
+        await write_last_notice(new_notices[0][1])  # Store the title of the last new notice
     else:
         print("✅ No new notices detected.")
 
