@@ -99,7 +99,7 @@ async def send_email(subject, notices):
 async def send_telegram_messages(notices):
     """Send Telegram messages with new notices and their count."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    message = f"📢 There are {len(notices)} new notices:\n\n"
+    message = f"📢 New notice count: {len(notices)}\n\n"
     for i, (date, title, link) in enumerate(notices):
         message += f"{i+1}. {date} - {title}\n"
         if link != "No link":
@@ -138,11 +138,11 @@ async def main():
 
         if new_notices:
             print(f"✅ Found {len(new_notices)} new notices!")
-            await send_email(f"📢 {len(new_notices)} New Notices", new_notices)
+            await send_email(f"📢 {len(new_notices)} New Notice(s)", new_notices)
             await send_telegram_messages(new_notices)
             await write_latest_notice(latest_notices[0][1])  # Update to newest notice
         else:
-            print("✅ No new notices detected.")
+            print("✅ No new notices found.")
     except Exception as e:
         logging.error(f"❌ Error in main: {e}")
         print(f"❌ Error occurred: {e}")
