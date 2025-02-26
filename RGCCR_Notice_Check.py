@@ -73,7 +73,7 @@ async def send_email(subject, notices):
 
         email_body = f"""
         <html><body>
-        <h3>📢 New notice count: {len(notices)}</h3>
+        <h3>📢 NEW NOTICE COUNT: {len(notices)}</h3>
         <table border="1" cellspacing="0" cellpadding="5">
         <tr><th>#</th><th>Date</th><th>Title</th><th>Link</th></tr>
         """
@@ -99,11 +99,11 @@ async def send_email(subject, notices):
 async def send_telegram_messages(notices):
     """Send Telegram messages with new notices and their count."""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    message = f"📢 New notice count: {len(notices)}\n\n"
+    message = f"📢 NEW NOTICE COUNT: {len(notices)}\n\n"
     for i, (date, title, link) in enumerate(notices):
         message += f"{i+1}. {date} - {title}\n"
         if link != "No link":
-            message += f"   🔗 {link}\n"
+            message += f"   🔗 {link}\n\n"
 
     async with aiohttp.ClientSession() as session:
         for chat_id in TELEGRAM_CHAT_IDS:
@@ -138,7 +138,7 @@ async def main():
 
         if new_notices:
             print(f"✅ Found {len(new_notices)} new notices!")
-            await send_email(f"📢 {len(new_notices)} New Notice(s)", new_notices)
+            await send_email(f"📢 RGCCR Notice Bot: {len(new_notices)} New Notice(s)", new_notices)
             await send_telegram_messages(new_notices)
             await write_latest_notice(latest_notices[0][1])  # Update to newest notice
         else:
