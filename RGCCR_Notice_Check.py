@@ -156,9 +156,9 @@ async def send_telegram_messages(notices):
     for i, (date, title, link) in enumerate(notices):
         message += f"{i+1}. {date} - {title}\n"
         if link != "No link":
-            message += f"   🔗 [View]({link})\n\n"
+            message += f"   🔗 [View]({link})\n"
         else:
-            message += "   No link available\n\n"
+            message += "   No link available\n"
 
     async with aiohttp.ClientSession() as session:
         for chat_id in TELEGRAM_CHAT_IDS:
