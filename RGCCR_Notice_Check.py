@@ -8,9 +8,12 @@ from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from aiosmtplib import SMTP
 
-# Load environment variables
+# Load environment variables from a .env file for secure configuration
+print("🌍 Loading environment variables from .env file...")
 load_dotenv()
+print("✅ Environment variables loaded successfully.")
 
+# Retrieve configuration details from environment variables
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 EMAIL_RECEIVERS = os.getenv("EMAIL_RECEIVERS").split(",")
@@ -19,61 +22,106 @@ EMAIL_SENDER_NAME = "RGCCR Notice Bot"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS").split(",")
 
+# Define constants for the script
 NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"
 LATEST_NOTICE_FILE = "data/latest_notice.txt"
 LOG_FILE = "data/error.log"
-NOTICE_LIMIT = 10  # Fetch up to 10 notices
+NOTICE_LIMIT = 10  # Maximum number of notices to fetch at once
 
-# Setup directories and logging
+# Ensure the data directory exists to store files
+print("📁 Checking if 'data' directory exists...")
 os.makedirs("data", exist_ok=True)
-logging.basicConfig(filename=LOG_FILE, level=logging.ERROR, format="%(asctime)s - %(levelname)s - %(message)s")
+print("✅ 'data' directory is ready.")
+
+# Configure logging to track errors in a persistent log file
+print("📋 Setting up logging configuration...")
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.ERROR,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+print("✅ Logging configured to write errors to", LOG_FILE)
 
 async def fetch_latest_notices():
-    """Fetch the latest notices from the website."""
-    async with aiohttp.ClientSession() as session:
-        async with session.get(NOTICE_URL, timeout=5) as response:
-            if response.status != 200:
-                raise ValueError(f"❌ Failed to fetch notices: {response.status}")
-            soup = BeautifulSoup(await response.text(), "html.parser")
-            notice_table = soup.select_one("table.table-striped")
-            if not notice_table:
-                raise ValueError("❌ Notice table not found!")
-            
-            notices = []
-            for row in notice_table.select("tbody tr")[:NOTICE_LIMIT]:
-                cols = row.find_all("td")
-                if len(cols) < 3:
-                    continue
-                title = cols[0].text.strip()
-                date = cols[1].text.strip()
-                link_tag = cols[2].find("a")
-                link = link_tag["href"] if link_tag else "No link"
-                notices.append((date, title, link))
-            return notices
+    """Fetch the latest notices from the RGCCR website."""
+    print("🔄 Starting to fetch the latest notices from", NOTICE_URL)
+    try:
+        async with aiohttp.ClientSession() as session:
+            print("🌐 Opening HTTP session to fetch webpage content...")
+            async with session.get(NOTICE_URL, timeout=5) as response:
+                print(f"ℹ️ Received response with status code: {response.status}")
+                if response.status != 200:
+                    raise ValueError(f"❌ Failed to fetch notices: HTTP status {response.status}")
+                print("📄 Parsing webpage content with BeautifulSoup...")
+                soup = BeautifulSoup(await response.text(), "html.parser")
+                notice_table = soup.select_one("table.table-striped")
+                if not notice_table:
+                    raise ValueError("❌ Notice table not found on the webpage!")
+                
+                notices = []
+                print(f"🔍 Scraping up to {NOTICE_LIMIT} notices from the table...")
+                for row in notice_table.select("tbody tr")[:NOTICE_LIMIT]:
+                    cols = row.find_all("td")
+                    if len(cols) < 3:
+                        print("⚠️ Skipping malformed table row with insufficient columns.")
+                        continue
+                    title = cols[0].text.strip()
+                    date = cols[1].text.strip()
+                    link_tag = cols[2].find("a")
+                    link = link_tag["href"] if link_tag else "No link"
+                    notices.append((date, title, link))
+                    print(f"✅ Added notice: {title} (Date: {date})")
+                print(f"✅ Successfully fetched {len(notices)} notices from the website.")
+                return notices
+    except Exception as e:
+        error_msg = f"❌ Error fetching notices from {NOTICE_URL}: {str(e)}"
+        logging.error(error_msg)
+        print(error_msg)
+        return []
 
 async def read_latest_notice():
-    """Read the last stored notice title from file."""
+    """Read the title of the last stored notice from the file."""
+    print("📖 Attempting to read the last stored notice from", LATEST_NOTICE_FILE)
     if not os.path.exists(LATEST_NOTICE_FILE):
+        print("ℹ️ No stored notice file found. Treating all fetched notices as new.")
         return None
-    with open(LATEST_NOTICE_FILE, "r") as file:
-        return file.read().strip()
+    try:
+        with open(LATEST_NOTICE_FILE, "r") as file:
+            stored_title = file.read().strip()
+            print(f"✅ Retrieved last stored notice title: '{stored_title}'")
+            return stored_title
+    except Exception as e:
+        error_msg = f"❌ Failed to read stored notice from {LATEST_NOTICE_FILE}: {str(e)}"
+        logging.error(error_msg)
+        print(error_msg)
+        return None
 
 async def write_latest_notice(latest_notice_id):
-    """Write the latest notice title to file."""
-    with open(LATEST_NOTICE_FILE, "w") as file:
-        file.write(latest_notice_id)
+    """Write the latest notice title to the storage file."""
+    print(f"💾 Preparing to update stored notice with title: '{latest_notice_id}'")
+    try:
+        with open(LATEST_NOTICE_FILE, "w") as file:
+            file.write(latest_notice_id)
+        print(f"✅ Successfully updated {LATEST_NOTICE_FILE} with new notice title: '{latest_notice_id}'")
+    except Exception as e:
+        error_msg = f"❌ Failed to write latest notice '{latest_notice_id}' to {LATEST_NOTICE_FILE}: {str(e)}"
+        logging.error(error_msg)
+        print(error_msg)
 
 async def send_email(subject, notices):
-    """Send email with new notices and their count."""
+    """Send an email notification containing the new notices."""
+    print("📧 Preparing to send email notification to", ", ".join(EMAIL_RECEIVERS))
     try:
         msg = MIMEMultipart()
         msg["From"] = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER}>"
         msg["To"] = ", ".join(EMAIL_RECEIVERS)
         msg["Subject"] = subject
 
+        print("📝 Constructing HTML email body with notice details...")
         email_body = f"""
         <html><body>
         <h3>📢 NEW NOTICE COUNT: {len(notices)}</h3>
+        <p>The following new notices were found on the RGCCR website:</p>
         <table border="1" cellspacing="0" cellpadding="5">
         <tr><th>#</th><th>Date</th><th>Title</th><th>Link</th></tr>
         """
@@ -87,67 +135,102 @@ async def send_email(subject, notices):
         email_body += "</table></body></html>"
 
         msg.attach(MIMEText(email_body, "html"))
-
+        print("📤 Connecting to SMTP server to send email...")
         async with SMTP(hostname="smtp.gmail.com", port=465, use_tls=True) as smtp:
+            print("🔑 Logging into SMTP server with sender credentials...")
             await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            print("🚀 Sending email to recipients...")
             await smtp.send_message(msg)
-        # Modified success message to include email recipients
-        print(f"✅ Email sent to: {', '.join(EMAIL_RECEIVERS)}")
+        print(f"✅ Email successfully sent to: {', '.join(EMAIL_RECEIVERS)}")
     except Exception as e:
-        # Modified error message to include intended recipients
-        logging.error(f"❌ Failed to send email to {', '.join(EMAIL_RECEIVERS)}: {e}")
-        print(f"❌ Failed to send email to {', '.join(EMAIL_RECEIVERS)}: {e}")
+        error_msg = f"❌ Failed to send email to {', '.join(EMAIL_RECEIVERS)}: {str(e)}"
+        logging.error(error_msg)
+        print(error_msg)
 
 async def send_telegram_messages(notices):
-    """Send Telegram messages with new notices and their count."""
+    """Send Telegram notifications with the new notices, using Markdown formatting."""
+    print("📱 Preparing to send Telegram notifications to chat IDs:", ", ".join(TELEGRAM_CHAT_IDS))
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    message = f"📢 NEW NOTICE COUNT: {len(notices)}\n\n"
+    print(f"📝 Building Telegram message for {len(notices)} new notices...")
+    message = f"📢 *NEW NOTICE COUNT: {len(notices)}*\n\n"
     for i, (date, title, link) in enumerate(notices):
         message += f"{i+1}. {date} - {title}\n"
         if link != "No link":
-            message += f"   🔗 {link}\n\n"
+            message += f"   🔗 [View]({link})\n\n"
+        else:
+            message += "   No link available\n\n"
 
     async with aiohttp.ClientSession() as session:
         for chat_id in TELEGRAM_CHAT_IDS:
-            async with session.post(url, json={"chat_id": chat_id, "text": message}) as response:
-                resp_json = await response.json()
-                if resp_json.get("ok"):
-                    print(f"✅ Sent Telegram message to {chat_id}")
-                else:
-                    print(f"❌ Failed to send Telegram message to {chat_id}: {resp_json}")
+            payload = {
+                "chat_id": chat_id,
+                "text": message,
+                "parse_mode": "Markdown"
+            }
+            print(f"📤 Sending Telegram message to chat ID: {chat_id}")
+            try:
+                async with session.post(url, json=payload) as response:
+                    resp_json = await response.json()
+                    if resp_json.get("ok"):
+                        print(f"✅ Telegram message successfully sent to chat ID: {chat_id}")
+                    else:
+                        error_msg = f"❌ Failed to send Telegram message to chat ID {chat_id}: {resp_json.get('description')}"
+                        logging.error(error_msg)
+                        print(error_msg)
+            except Exception as e:
+                error_msg = f"❌ Error sending Telegram message to chat ID {chat_id}: {str(e)}"
+                logging.error(error_msg)
+                print(error_msg)
 
 async def main():
-    """Main function to check and notify about new notices."""
-    print("🔄 Checking for new notices...")
+    """Main function to orchestrate notice checking and notification sending."""
+    print("🚀 Starting the RGCCR Notice Checker script...")
     try:
+        # Fetch the latest notices from the website
+        print("🔍 Initiating notice fetch process...")
         latest_notices = await fetch_latest_notices()
         if not latest_notices:
-            print("✅ No notices found on the website.")
+            print("ℹ️ No notices were fetched from the website. Exiting script.")
             return
 
+        # Read the last stored notice title
+        print("📋 Checking for previously stored notice...")
         last_stored_notice_id = await read_latest_notice()
-        new_notices = []
         
-        # If file is blank, all notices are new
+        # Identify new notices by comparing with the stored title
+        new_notices = []
         if last_stored_notice_id is None:
+            print("ℹ️ No previous notice stored. All fetched notices are considered new.")
             new_notices = latest_notices
         else:
-            # Collect notices until we hit the stored one
+            print(f"🔎 Comparing fetched notices against stored title: '{last_stored_notice_id}'")
             for notice in latest_notices:
                 if notice[1] == last_stored_notice_id:
+                    print(f"✅ Found match with stored notice: '{last_stored_notice_id}'. Stopping comparison.")
                     break
                 new_notices.append(notice)
+                print(f"🆕 Detected new notice: '{notice[1]}'")
 
         if new_notices:
-            print(f"✅ Found {len(new_notices)} new notices!")
+            print(f"🎉 Found {len(new_notices)} new notice(s)! Proceeding with notifications...")
+            # Send email notification with new notices
             await send_email(f"📢 RGCCR Notice Bot: {len(new_notices)} New Notice(s)", new_notices)
+            # Send Telegram notifications with new notices
             await send_telegram_messages(new_notices)
-            await write_latest_notice(latest_notices[0][1])  # Update to newest notice
+            # Update the stored notice to the latest one
+            print("🔄 Updating the stored notice to the latest fetched notice...")
+            await write_latest_notice(latest_notices[0][1])
+            print("✅ Notice checking and notification process completed successfully!")
         else:
-            print("✅ No new notices found.")
+            print("ℹ️ No new notices detected since the last check.")
     except Exception as e:
-        logging.error(f"❌ Error in main: {e}")
-        print(f"❌ Error occurred: {e}")
+        error_msg = f"❌ An unexpected error occurred in the main function: {str(e)}"
+        logging.error(error_msg)
+        print(error_msg)
+    finally:
+        print("🏁 RGCCR Notice Checker script execution finished.")
 
 if __name__ == "__main__":
+    print("▶️ Launching the notice checker script...")
     asyncio.run(main())
+    print("🛑 Script execution completed.")
