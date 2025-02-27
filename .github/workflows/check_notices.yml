@@ -25,19 +25,19 @@ jobs:
         uses: actions/cache@v3
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}-v1
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt  # Removed --no-cache-dir
+          pip install -r requirements.txt
 
       - name: Backup Previous Notices
         run: |
           mkdir -p data
-          cp data/previous_notices.txt data/previous_notices_backup.txt || echo "No previous notice file"
+          cp data/latest_notice.txt data/latest_notice_backup.txt || echo "No previous notice file"
 
       - name: Run Notice Checker
         run: python RGCCR_Notice_Check.py
@@ -55,9 +55,13 @@ jobs:
           git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/MrBadasss/RGCCR_Notice_Check.git
           git fetch origin main
           git checkout main
-          git add -A
-          git diff-index --quiet HEAD || git commit -m "Update cached notice section"
-          git push origin main
+          git add data/latest_notice.txt
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Update cached notice section"
+            git push origin main
+          fi
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
 
