@@ -47,6 +47,9 @@ jobs:
           EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+          TEST_EMAIL_RECEIVERS: ${{ secrets.TEST_EMAIL_RECEIVERS }}
+          TEST_TELEGRAM_CHAT_IDS: ${{ secrets.TEST_TELEGRAM_CHAT_IDS }}
+          DEVELOPER_EMAIL: ${{ secrets.DEVELOPER_EMAIL }}
 
       - name: Commit and Push Notice Cache
         run: |
