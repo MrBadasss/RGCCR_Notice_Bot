@@ -16,13 +16,13 @@ print("✅ Environment variables loaded successfully.")
 # Retrieve configuration details from environment variables
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
-EMAIL_RECEIVERS = os.getenv("EMAIL_RECEIVERS", "").split("\n")
-TEST_EMAIL_RECEIVERS = os.getenv("TEST_EMAIL_RECEIVERS", "").split("\n")
+EMAIL_RECEIVERS = os.getenv("EMAIL_RECEIVERS", "").split(",")
+TEST_EMAIL_RECEIVERS = os.getenv("TEST_EMAIL_RECEIVERS", "").split(",")
 EMAIL_SENDER_NAME = "RGCCR Notice Bot"
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split("\n")
-TEST_TELEGRAM_CHAT_IDS = os.getenv("TEST_TELEGRAM_CHAT_IDS", "").split("\n")
+TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split(",")
+TEST_TELEGRAM_CHAT_IDS = os.getenv("TEST_TELEGRAM_CHAT_IDS", "").split(",")
 
 DEVELOPER_EMAIL = os.getenv("DEVELOPER_EMAIL")
 
