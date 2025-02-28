@@ -16,11 +16,15 @@ print("✅ Environment variables loaded successfully.")
 # Retrieve configuration details from environment variables
 EMAIL_SENDER = os.getenv("EMAIL_SENDER")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
-EMAIL_RECEIVERS = os.getenv("EMAIL_RECEIVERS").split(",")
+EMAIL_RECEIVERS = os.getenv("EMAIL_RECEIVERS", "").split("\n")
+TEST_EMAIL_RECEIVERS = os.getenv("TEST_EMAIL_RECEIVERS", "").split("\n")
 EMAIL_SENDER_NAME = "RGCCR Notice Bot"
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS").split(",")
+TELEGRAM_CHAT_IDS = os.getenv("TELEGRAM_CHAT_IDS", "").split("\n")
+TEST_TELEGRAM_CHAT_IDS = os.getenv("TEST_TELEGRAM_CHAT_IDS", "").split("\n")
+
+DEVELOPER_EMAIL = os.getenv("DEVELOPER_EMAIL")
 
 # Define constants for the script
 NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"
@@ -41,6 +45,15 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 print("✅ Logging configured to write errors to", LOG_FILE)
+
+# Function to determine if testing mode is enabled
+def is_testing_mode():
+    """Check if the script should run in testing mode by reading a file."""
+    testing_file = "data/testing_mode"
+    if os.path.exists(testing_file):
+        with open(testing_file, "r") as f:
+            return f.read().strip() == "1"
+    return False
 
 async def fetch_latest_notices():
     """Fetch the latest notices from the RGCCR website."""
@@ -108,13 +121,14 @@ async def write_latest_notice(latest_notice_id):
         logging.error(error_msg)
         print(error_msg)
 
-async def send_email(subject, notices):
-    """Send an email notification containing the new notices."""
-    print("📧 Preparing to send email notification to", ", ".join(EMAIL_RECEIVERS))
+async def send_email(subject, notices, receivers):
+    """Send an email notification containing the new notices using Bcc."""
+    print("📧 Preparing to send email notification to", ", ".join(receivers))
     try:
         msg = MIMEMultipart()
         msg["From"] = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER}>"
-        msg["To"] = ", ".join(EMAIL_RECEIVERS)
+        msg["To"] = "undisclosed-recipients:;"  # Placeholder since Bcc is used
+        msg["Bcc"] = ", ".join(receivers)       # Recipients in Bcc for privacy
         msg["Subject"] = subject
 
         print("📝 Constructing HTML email body with notice details...")
@@ -141,15 +155,15 @@ async def send_email(subject, notices):
             await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
             print("🚀 Sending email to recipients...")
             await smtp.send_message(msg)
-        print(f"✅ Email successfully sent to: {', '.join(EMAIL_RECEIVERS)}")
+        print(f"✅ Email successfully sent to: {', '.join(receivers)}")
     except Exception as e:
-        error_msg = f"❌ Failed to send email to {', '.join(EMAIL_RECEIVERS)}: {str(e)}"
+        error_msg = f"❌ Failed to send email to {', '.join(receivers)}: {str(e)}"
         logging.error(error_msg)
         print(error_msg)
 
-async def send_telegram_messages(notices):
+async def send_telegram_messages(notices, chat_ids):
     """Send Telegram notifications with the new notices, using Markdown formatting."""
-    print("📱 Preparing to send Telegram notifications to chat IDs:", ", ".join(TELEGRAM_CHAT_IDS))
+    print("📱 Preparing to send Telegram notifications to chat IDs:", ", ".join(chat_ids))
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     print(f"📝 Building Telegram message for {len(notices)} new notices...")
     message = f"📢 *NEW NOTICE COUNT: {len(notices)}*\n\n"
@@ -161,7 +175,7 @@ async def send_telegram_messages(notices):
             message += "   No link available\n"
 
     async with aiohttp.ClientSession() as session:
-        for chat_id in TELEGRAM_CHAT_IDS:
+        for chat_id in chat_ids:
             payload = {
                 "chat_id": chat_id,
                 "text": message,
@@ -182,10 +196,38 @@ async def send_telegram_messages(notices):
                 logging.error(error_msg)
                 print(error_msg)
 
+async def send_error_email(error_msg):
+    """Send an error notification to the repository developer."""
+    if not DEVELOPER_EMAIL:
+        print("❌ DEVELOPER_EMAIL is not set. Cannot send error notice.")
+        return
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER}>"
+        msg["To"] = DEVELOPER_EMAIL
+        msg["Subject"] = "❌ Error in RGCCR Notice Checker"
+        msg.attach(MIMEText(f"<pre>{error_msg}</pre>", "html"))
+        async with SMTP(hostname="smtp.gmail.com", port=465, use_tls=True) as smtp:
+            await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            await smtp.send_message(msg)
+        print(f"✅ Error notice sent to {DEVELOPER_EMAIL}")
+    except Exception as e:
+        print(f"❌ Failed to send error notice: {str(e)}")
+
 async def main():
     """Main function to orchestrate notice checking and notification sending."""
     print("🚀 Starting the RGCCR Notice Checker script...")
     try:
+        # Determine receivers based on testing mode
+        if is_testing_mode():
+            print("🔧 Running in testing mode. Using test receivers.")
+            email_receivers = TEST_EMAIL_RECEIVERS
+            telegram_chat_ids = TEST_TELEGRAM_CHAT_IDS
+        else:
+            print("▶️ Running in normal mode. Using regular receivers.")
+            email_receivers = EMAIL_RECEIVERS
+            telegram_chat_ids = TELEGRAM_CHAT_IDS
+
         # Fetch the latest notices from the website
         print("🔍 Initiating notice fetch process...")
         latest_notices = await fetch_latest_notices()
@@ -214,9 +256,9 @@ async def main():
         if new_notices:
             print(f"🎉 Found {len(new_notices)} new notice(s)! Proceeding with notifications...")
             # Send email notification with new notices
-            await send_email(f"📢 RGCCR Notice Bot: {len(new_notices)} New Notice(s)", new_notices)
+            await send_email(f"📢 RGCCR Notice Bot: {len(new_notices)} New Notice(s)", new_notices, email_receivers)
             # Send Telegram notifications with new notices
-            await send_telegram_messages(new_notices)
+            await send_telegram_messages(new_notices, telegram_chat_ids)
             # Update the stored notice to the latest one
             print("🔄 Updating the stored notice to the latest fetched notice...")
             await write_latest_notice(latest_notices[0][1])
@@ -227,6 +269,7 @@ async def main():
         error_msg = f"❌ An unexpected error occurred in the main function: {str(e)}"
         logging.error(error_msg)
         print(error_msg)
+        await send_error_email(error_msg)
     finally:
         print("🏁 RGCCR Notice Checker script execution finished.")
 
