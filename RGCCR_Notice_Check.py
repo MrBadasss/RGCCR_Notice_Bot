@@ -122,7 +122,7 @@ async def write_latest_notice(latest_notice_id):
         print(error_msg)
 
 async def send_email(subject, notices, receivers):
-    """Send an email notification containing the new notices using Outlook mail service."""
+    """Send an email notification containing the new notices using Outlook."""
     print("📧 Preparing to send email notification to", ", ".join(receivers))
     try:
         msg = MIMEMultipart()
@@ -130,7 +130,6 @@ async def send_email(subject, notices, receivers):
         msg["To"] = ", ".join(receivers)
         msg["Subject"] = subject
 
-        print("📝 Constructing HTML email body with notice details...")
         email_body = f"""
         <html><body>
         <h3>📢 NEW NOTICE COUNT: {len(notices)}</h3>
@@ -149,19 +148,21 @@ async def send_email(subject, notices, receivers):
 
         msg.attach(MIMEText(email_body, "html"))
         print("📤 Connecting to SMTP server to send email...")
-        async with SMTP(hostname="smtp-mail.outlook.com", port=587, use_tls=False) as smtp:
-            print("🔒 Upgrading connection to TLS...")
-            await smtp.starttls()  # Upgrade to TLS for Outlook
-            print("🔑 Logging into SMTP server with sender credentials...")
-            await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            print("🚀 Sending email to recipients...")
-            await smtp.send_message(msg)
+        
+        smtp = SMTP(hostname="smtp-mail.outlook.com", port=587, use_tls=False)
+        await smtp.connect()
+        print("🔒 Upgrading connection to TLS...")
+        await smtp.starttls()
+        print("🔑 Logging into SMTP server with sender credentials...")
+        await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        print("🚀 Sending email to recipients...")
+        await smtp.send_message(msg)
+        await smtp.quit()
         print(f"✅ Email successfully sent to: {', '.join(receivers)}")
     except Exception as e:
         error_msg = f"❌ Failed to send email to {', '.join(receivers)}: {str(e)}"
         logging.error(error_msg)
         print(error_msg)
-
 # Commenting out the Google mailing part for future reference
 # async def send_email(subject, notices, receivers):
 #     """Send an email notification containing the new notices using Gmail."""
