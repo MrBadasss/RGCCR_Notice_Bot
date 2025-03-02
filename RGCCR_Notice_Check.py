@@ -8,14 +8,14 @@ from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from aiosmtplib import SMTP
 
-# Load environment variables from a .env file for secure configuration
+# Load environment variables from a .env file or GitHub secrets
 print("🌍 Loading environment variables from .env file...")
 load_dotenv()
 print("✅ Environment variables loaded successfully.")
 
 # Retrieve configuration details from environment variables
-EMAIL_SENDER = os.getenv("OUTLOOK_EMAIL_SENDER")  # Updated for Outlook
-EMAIL_PASSWORD = os.getenv("OUTLOOK_EMAIL_PASSWORD")  # Updated for Outlook
+EMAIL_SENDER = os.getenv("OUTLOOK_EMAIL_SENDER")
+EMAIL_PASSWORD = os.getenv("OUTLOOK_EMAIL_PASSWORD")
 EMAIL_RECEIVERS = os.getenv("EMAIL_RECEIVERS", "").split("\n")
 TEST_EMAIL_RECEIVERS = os.getenv("TEST_EMAIL_RECEIVERS", "").split("\n")
 EMAIL_SENDER_NAME = "RGCCR Notice Bot"
@@ -149,8 +149,8 @@ async def send_email(subject, notices, receivers):
         msg.attach(MIMEText(email_body, "html"))
         print("📤 Connecting to SMTP server to send email...")
         
+        # Correct SMTP configuration for Outlook with STARTTLS
         smtp = SMTP(hostname="smtp-mail.outlook.com", port=587, use_tls=False)
-        # Removed: smtp.set_debuglevel(1) - Not supported in aiosmtplib and not required
         await smtp.connect()
         print("🔒 Upgrading connection to TLS...")
         await smtp.starttls()
@@ -164,45 +164,7 @@ async def send_email(subject, notices, receivers):
         error_msg = f"❌ Failed to send email to {', '.join(receivers)}: {str(e)}"
         logging.error(error_msg)
         print(error_msg)
-# Commenting out the Google mailing part for future reference
-# async def send_email(subject, notices, receivers):
-#     """Send an email notification containing the new notices using Gmail."""
-#     print("📧 Preparing to send email notification to", ", ".join(receivers))
-#     try:
-#         msg = MIMEMultipart()
-#         msg["From"] = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER}>"
-#         msg["To"] = ", ".join(receivers)
-#         msg["Subject"] = subject
-#
-#         print("📝 Constructing HTML email body with notice details...")
-#         email_body = f"""
-#         <html><body>
-#         <h3>📢 NEW NOTICE COUNT: {len(notices)}</h3>
-#         <p>The following new notices were found on the RGCCR website:</p>
-#         <table border="1" cellspacing="0" cellpadding="5">
-#         <tr><th>#</th><th>Date</th><th>Title</th><th>Link</th></tr>
-#         """
-#         for i, (date, title, link) in enumerate(notices):
-#             view_button = (
-#                 f'<a href="{link}" target="_blank" style="text-decoration:none;">'
-#                 f'<button style="padding:5px 10px;background-color:#007BFF;color:white;border:none;border-radius:5px;">View</button></a>'
-#                 if link != "No link" else "No link"
-#             )
-#             email_body += f"<tr><td>{i+1}</td><td>{date}</td><td>{title}</td><td>{view_button}</td></tr>"
-#         email_body += "</table></body></html>"
-#
-#         msg.attach(MIMEText(email_body, "html"))
-#         print("📤 Connecting to SMTP server to send email...")
-#         async with SMTP(hostname="smtp.gmail.com", port=465, use_tls=True) as smtp:
-#             print("🔑 Logging into SMTP server with sender credentials...")
-#             await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
-#             print("🚀 Sending email to recipients...")
-#             await smtp.send_message(msg)
-#         print(f"✅ Email successfully sent to: {', '.join(receivers)}")
-#     except Exception as e:
-#         error_msg = f"❌ Failed to send email to {', '.join(receivers)}: {str(e)}"
-#         logging.error(error_msg)
-#         print(error_msg)
+        raise  # Re-raise to trigger error email if needed
 
 async def send_telegram_messages(notices, chat_ids):
     """Send Telegram notifications with the new notices, using Markdown formatting."""
@@ -250,10 +212,12 @@ async def send_error_email(error_msg):
         msg["To"] = DEVELOPER_EMAIL
         msg["Subject"] = "❌ Error in RGCCR Notice Checker"
         msg.attach(MIMEText(f"<pre>{error_msg}</pre>", "html"))
-        async with SMTP(hostname="smtp-mail.outlook.com", port=587, use_tls=False) as smtp:
-            await smtp.starttls()  # Upgrade to TLS for Outlook
-            await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            await smtp.send_message(msg)
+        smtp = SMTP(hostname="smtp-mail.outlook.com", port=587, use_tls=False)
+        await smtp.connect()
+        await smtp.starttls()
+        await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
+        await smtp.send_message(msg)
+        await smtp.quit()
         print(f"✅ Error notice sent to {DEVELOPER_EMAIL}")
     except Exception as e:
         print(f"❌ Failed to send error notice: {str(e)}")
