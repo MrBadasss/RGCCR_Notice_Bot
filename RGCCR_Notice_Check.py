@@ -150,6 +150,7 @@ async def send_email(subject, notices, receivers):
         print("📤 Connecting to SMTP server to send email...")
         
         smtp = SMTP(hostname="smtp-mail.outlook.com", port=587, use_tls=False)
+        smtp.set_debuglevel(1)
         await smtp.connect()
         print("🔒 Upgrading connection to TLS...")
         await smtp.starttls()
