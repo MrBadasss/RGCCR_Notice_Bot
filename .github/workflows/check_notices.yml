@@ -44,8 +44,6 @@ jobs:
         env:
           EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
           EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          OUTLOOK_EMAIL_SENDER: ${{ secrets.OUTLOOK_EMAIL_SENDER }}
-          OUTLOOK_EMAIL_PASSWORD: ${{ secrets.OUTLOOK_EMAIL_PASSWORD }}
           EMAIL_RECEIVERS: ${{ secrets.EMAIL_RECEIVERS }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
