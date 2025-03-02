@@ -127,8 +127,7 @@ async def send_email(subject, notices, receivers):
     try:
         msg = MIMEMultipart()
         msg["From"] = f"{EMAIL_SENDER_NAME} <{EMAIL_SENDER}>"
-        msg["To"] = "undisclosed-recipients:;"  # Placeholder since Bcc is used
-        msg["Bcc"] = ", ".join(receivers)       # Recipients in Bcc for privacy
+        msg["To"] = ", ".join(receivers)  
         msg["Subject"] = subject
 
         print("📝 Constructing HTML email body with notice details...")
