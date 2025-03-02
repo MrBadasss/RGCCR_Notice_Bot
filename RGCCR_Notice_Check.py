@@ -8,14 +8,14 @@ from email.mime.text import MIMEText
 from dotenv import load_dotenv
 from aiosmtplib import SMTP
 
-# Load environment variables from a .env file or GitHub secrets
+# Load environment variables from a .env file for secure configuration
 print("🌍 Loading environment variables from .env file...")
 load_dotenv()
 print("✅ Environment variables loaded successfully.")
 
 # Retrieve configuration details from environment variables
-EMAIL_SENDER = os.getenv("OUTLOOK_EMAIL_SENDER")
-EMAIL_PASSWORD = os.getenv("OUTLOOK_EMAIL_PASSWORD")
+EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 EMAIL_RECEIVERS = os.getenv("EMAIL_RECEIVERS", "").split("\n")
 TEST_EMAIL_RECEIVERS = os.getenv("TEST_EMAIL_RECEIVERS", "").split("\n")
 EMAIL_SENDER_NAME = "RGCCR Notice Bot"
@@ -46,6 +46,7 @@ logging.basicConfig(
 )
 print("✅ Logging configured to write errors to", LOG_FILE)
 
+
 # Function to determine if testing mode is enabled
 def is_testing_mode():
     """Check if the script should run in testing mode by reading a file."""
@@ -54,6 +55,7 @@ def is_testing_mode():
         with open(testing_file, "r") as f:
             return f.read().strip() == "1"
     return False
+
 
 async def fetch_latest_notices():
     """Fetch the latest notices from the RGCCR website."""
@@ -70,7 +72,7 @@ async def fetch_latest_notices():
                 notice_table = soup.select_one("table.table-striped")
                 if not notice_table:
                     raise ValueError("❌ Notice table not found on the webpage!")
-                
+
                 notices = []
                 print(f"🔍 Scraping up to {NOTICE_LIMIT} notices from the table...")
                 for row in notice_table.select("tbody tr")[:NOTICE_LIMIT]:
@@ -92,6 +94,7 @@ async def fetch_latest_notices():
         print(error_msg)
         return []
 
+
 async def read_latest_notice():
     """Read the title of the last stored notice from the file."""
     print("📖 Attempting to read the last stored notice from", LATEST_NOTICE_FILE)
@@ -109,6 +112,7 @@ async def read_latest_notice():
         print(error_msg)
         return None
 
+
 async def write_latest_notice(latest_notice_id):
     """Write the latest notice title to the storage file."""
     print(f"💾 Preparing to update stored notice with title: '{latest_notice_id}'")
@@ -121,8 +125,9 @@ async def write_latest_notice(latest_notice_id):
         logging.error(error_msg)
         print(error_msg)
 
+
 async def send_email(subject, notices, receivers):
-    """Send an email notification containing the new notices using Outlook."""
+    """Send an email notification containing the new notices using Bcc."""
     print("📧 Preparing to send email notification to", ", ".join(receivers))
     try:
         msg = MIMEMultipart()
@@ -130,6 +135,7 @@ async def send_email(subject, notices, receivers):
         msg["To"] = ", ".join(receivers)
         msg["Subject"] = subject
 
+        print("📝 Constructing HTML email body with notice details...")
         email_body = f"""
         <html><body>
         <h3>📢 NEW NOTICE COUNT: {len(notices)}</h3>
@@ -143,28 +149,22 @@ async def send_email(subject, notices, receivers):
                 f'<button style="padding:5px 10px;background-color:#007BFF;color:white;border:none;border-radius:5px;">View</button></a>'
                 if link != "No link" else "No link"
             )
-            email_body += f"<tr><td>{i+1}</td><td>{date}</td><td>{title}</td><td>{view_button}</td></tr>"
+            email_body += f"<tr><td>{i + 1}</td><td>{date}</td><td>{title}</td><td>{view_button}</td></tr>"
         email_body += "</table></body></html>"
 
         msg.attach(MIMEText(email_body, "html"))
         print("📤 Connecting to SMTP server to send email...")
-        
-        # Correct SMTP configuration for Outlook with STARTTLS
-        smtp = SMTP(hostname="smtp-mail.outlook.com", port=587, use_tls=False)
-        await smtp.connect()
-        print("🔒 Upgrading connection to TLS...")
-        await smtp.starttls()
-        print("🔑 Logging into SMTP server with sender credentials...")
-        await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
-        print("🚀 Sending email to recipients...")
-        await smtp.send_message(msg)
-        await smtp.quit()
+        async with SMTP(hostname="smtp.gmail.com", port=465, use_tls=True) as smtp:
+            print("🔑 Logging into SMTP server with sender credentials...")
+            await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            print("🚀 Sending email to recipients...")
+            await smtp.send_message(msg)
         print(f"✅ Email successfully sent to: {', '.join(receivers)}")
     except Exception as e:
         error_msg = f"❌ Failed to send email to {', '.join(receivers)}: {str(e)}"
         logging.error(error_msg)
         print(error_msg)
-        raise  # Re-raise to trigger error email if needed
+
 
 async def send_telegram_messages(notices, chat_ids):
     """Send Telegram notifications with the new notices, using Markdown formatting."""
@@ -173,7 +173,7 @@ async def send_telegram_messages(notices, chat_ids):
     print(f"📝 Building Telegram message for {len(notices)} new notices...")
     message = f"📢 *NEW NOTICE COUNT: {len(notices)}*\n\n"
     for i, (date, title, link) in enumerate(notices):
-        message += f"{i+1}. {date} - {title}\n"
+        message += f"{i + 1}. {date} - {title}\n"
         if link != "No link":
             message += f"   🔗 [View]({link})\n"
         else:
@@ -201,8 +201,9 @@ async def send_telegram_messages(notices, chat_ids):
                 logging.error(error_msg)
                 print(error_msg)
 
+
 async def send_error_email(error_msg):
-    """Send an error notification to the repository developer using Outlook."""
+    """Send an error notification to the repository developer."""
     if not DEVELOPER_EMAIL:
         print("❌ DEVELOPER_EMAIL is not set. Cannot send error notice.")
         return
@@ -212,15 +213,13 @@ async def send_error_email(error_msg):
         msg["To"] = DEVELOPER_EMAIL
         msg["Subject"] = "❌ Error in RGCCR Notice Checker"
         msg.attach(MIMEText(f"<pre>{error_msg}</pre>", "html"))
-        smtp = SMTP(hostname="smtp-mail.outlook.com", port=587, use_tls=False)
-        await smtp.connect()
-        await smtp.starttls()
-        await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
-        await smtp.send_message(msg)
-        await smtp.quit()
+        async with SMTP(hostname="smtp.gmail.com", port=465, use_tls=True) as smtp:
+            await smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            await smtp.send_message(msg)
         print(f"✅ Error notice sent to {DEVELOPER_EMAIL}")
     except Exception as e:
         print(f"❌ Failed to send error notice: {str(e)}")
+
 
 async def main():
     """Main function to orchestrate notice checking and notification sending."""
@@ -246,7 +245,7 @@ async def main():
         # Read the last stored notice title
         print("📋 Checking for previously stored notice...")
         last_stored_notice_id = await read_latest_notice()
-        
+
         # Identify new notices by comparing with the stored title
         new_notices = []
         if last_stored_notice_id is None:
@@ -280,6 +279,7 @@ async def main():
         await send_error_email(error_msg)
     finally:
         print("🏁 RGCCR Notice Checker script execution finished.")
+
 
 if __name__ == "__main__":
     print("▶️ Launching the notice checker script...")
