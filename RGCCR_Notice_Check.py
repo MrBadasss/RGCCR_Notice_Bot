@@ -2,6 +2,7 @@ import os
 import aiohttp
 import asyncio
 import logging
+import json
 from bs4 import BeautifulSoup
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -31,6 +32,7 @@ NOTICE_URL = "https://rgccr.gov.bd/notice_categories/notice/"
 LATEST_NOTICE_FILE = "data/latest_notice.txt"
 LOG_FILE = "data/error.log"
 NOTICE_LIMIT = 10  # Maximum number of notices to fetch at once
+STORED_NOTICE_LIMIT = 5  # Number of recent notices to store
 
 # Ensure the data directory exists to store files
 print("📁 Checking if 'data' directory exists...")
@@ -46,7 +48,6 @@ logging.basicConfig(
 )
 print("✅ Logging configured to write errors to", LOG_FILE)
 
-
 # Function to determine if testing mode is enabled
 def is_testing_mode():
     """Check if the script should run in testing mode by reading a file."""
@@ -55,7 +56,6 @@ def is_testing_mode():
         with open(testing_file, "r") as f:
             return f.read().strip() == "1"
     return False
-
 
 async def fetch_latest_notices():
     """Fetch the latest notices from the RGCCR website."""
@@ -85,7 +85,7 @@ async def fetch_latest_notices():
                     link_tag = cols[2].find("a")
                     link = link_tag["href"] if link_tag else "No link"
                     notices.append((date, title, link))
-                    print(f"✅ Added notice: {title} (Date: {date})")
+                    print(f"✅ Added notice: {title} (Date: {date}, Link: {link})")
                 print(f"✅ Successfully fetched {len(notices)} notices from the website.")
                 return notices
     except Exception as e:
@@ -94,37 +94,38 @@ async def fetch_latest_notices():
         print(error_msg)
         return []
 
-
-async def read_latest_notice():
-    """Read the title of the last stored notice from the file."""
-    print("📖 Attempting to read the last stored notice from", LATEST_NOTICE_FILE)
+async def read_latest_notices():
+    """Read the list of stored notices from the file."""
+    print("📖 Attempting to read the stored notices from", LATEST_NOTICE_FILE)
     if not os.path.exists(LATEST_NOTICE_FILE):
         print("ℹ️ No stored notice file found. Treating all fetched notices as new.")
-        return None
+        return []
     try:
         with open(LATEST_NOTICE_FILE, "r") as file:
-            stored_title = file.read().strip()
-            print(f"✅ Retrieved last stored notice title: '{stored_title}'")
-            return stored_title
-    except Exception as e:
-        error_msg = f"❌ Failed to read stored notice from {LATEST_NOTICE_FILE}: {str(e)}"
+            stored_data = file.read().strip()
+            if stored_data:  # Check if file contains valid JSON
+                return json.loads(stored_data)
+            print("⚠️ Stored notice data is empty or invalid, treating as new.")
+            return []
+    except (json.JSONDecodeError, Exception) as e:
+        error_msg = f"❌ Failed to decode stored notices from {LATEST_NOTICE_FILE}: {str(e)}"
         logging.error(error_msg)
         print(error_msg)
-        return None
+        return []
 
-
-async def write_latest_notice(latest_notice_id):
-    """Write the latest notice title to the storage file."""
-    print(f"💾 Preparing to update stored notice with title: '{latest_notice_id}'")
+async def write_latest_notices(latest_notices):
+    """Write the list of recent notices to the storage file as JSON, limited to STORED_NOTICE_LIMIT."""
+    print(f"💾 Preparing to update stored notices with {len(latest_notices)} entries")
     try:
         with open(LATEST_NOTICE_FILE, "w") as file:
-            file.write(latest_notice_id)
-        print(f"✅ Successfully updated {LATEST_NOTICE_FILE} with new notice title: '{latest_notice_id}'")
+            # Keep only the most recent STORED_NOTICE_LIMIT notices
+            notices_to_store = latest_notices[-STORED_NOTICE_LIMIT:]
+            json.dump(notices_to_store, file)
+        print(f"✅ Successfully updated {LATEST_NOTICE_FILE} with {len(notices_to_store)} recent notices")
     except Exception as e:
-        error_msg = f"❌ Failed to write latest notice '{latest_notice_id}' to {LATEST_NOTICE_FILE}: {str(e)}"
+        error_msg = f"❌ Failed to write latest notices to {LATEST_NOTICE_FILE}: {str(e)}"
         logging.error(error_msg)
         print(error_msg)
-
 
 async def send_email(subject, notices, receivers):
     """Send an email notification containing the new notices using Bcc."""
@@ -165,7 +166,6 @@ async def send_email(subject, notices, receivers):
         logging.error(error_msg)
         print(error_msg)
 
-
 async def send_telegram_messages(notices, chat_ids):
     """Send Telegram notifications with the new notices, using Markdown formatting."""
     print("📱 Preparing to send Telegram notifications to chat IDs:", ", ".join(chat_ids))
@@ -201,7 +201,6 @@ async def send_telegram_messages(notices, chat_ids):
                 logging.error(error_msg)
                 print(error_msg)
 
-
 async def send_error_email(error_msg):
     """Send an error notification to the repository developer."""
     if not DEVELOPER_EMAIL:
@@ -219,7 +218,6 @@ async def send_error_email(error_msg):
         print(f"✅ Error notice sent to {DEVELOPER_EMAIL}")
     except Exception as e:
         print(f"❌ Failed to send error notice: {str(e)}")
-
 
 async def main():
     """Main function to orchestrate notice checking and notification sending."""
@@ -242,23 +240,29 @@ async def main():
             print("ℹ️ No notices were fetched from the website. Exiting script.")
             return
 
-        # Read the last stored notice title
-        print("📋 Checking for previously stored notice...")
-        last_stored_notice_id = await read_latest_notice()
+        # Read the list of stored notices
+        print("📋 Checking for previously stored notices...")
+        stored_notices = await read_latest_notices()
 
-        # Identify new notices by comparing with the stored title
+        # Identify new notices by comparing with stored notices
         new_notices = []
-        if last_stored_notice_id is None:
-            print("ℹ️ No previous notice stored. All fetched notices are considered new.")
+        if not stored_notices:
+            print("ℹ️ No previous notices stored. All fetched notices are considered new.")
             new_notices = latest_notices
         else:
-            print(f"🔎 Comparing fetched notices against stored title: '{last_stored_notice_id}'")
+            print(f"🔎 Comparing {len(latest_notices)} fetched notices against {len(stored_notices)} stored notices...")
             for notice in latest_notices:
-                if notice[1] == last_stored_notice_id:
-                    print(f"✅ Found match with stored notice: '{last_stored_notice_id}'. Stopping comparison.")
-                    break
-                new_notices.append(notice)
-                print(f"🆕 Detected new notice: '{notice[1]}'")
+                notice_date, notice_title, notice_link = notice
+                is_new = True
+                for stored_notice in stored_notices:
+                    if (notice_date == stored_notice['date'] and 
+                        notice_link == stored_notice['link']):
+                        print(f"✅ Found match: Date '{notice_date}', Title '{notice_title}', Link '{notice_link}'")
+                        is_new = False
+                        break
+                if is_new:
+                    new_notices.append(notice)
+                    print(f"🆕 Detected new notice: Date '{notice_date}', Title '{notice_title}', Link '{notice_link}'")
 
         if new_notices:
             print(f"🎉 Found {len(new_notices)} new notice(s)! Proceeding with notifications...")
@@ -266,9 +270,9 @@ async def main():
             await send_email(f"📢 RGCCR Notice Bot: {len(new_notices)} New Notice(s)", new_notices, email_receivers)
             # Send Telegram notifications with new notices
             await send_telegram_messages(new_notices, telegram_chat_ids)
-            # Update the stored notice to the latest one
-            print("🔄 Updating the stored notice to the latest fetched notice...")
-            await write_latest_notice(latest_notices[0][1])
+            # Update the stored notices with the latest set
+            print("🔄 Updating the stored notices to the latest fetched notices...")
+            await write_latest_notices(latest_notices)
             print("✅ Notice checking and notification process completed successfully!")
         else:
             print("ℹ️ No new notices detected since the last check.")
@@ -279,7 +283,6 @@ async def main():
         await send_error_email(error_msg)
     finally:
         print("🏁 RGCCR Notice Checker script execution finished.")
-
 
 if __name__ == "__main__":
     print("▶️ Launching the notice checker script...")
