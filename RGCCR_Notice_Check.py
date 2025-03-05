@@ -97,7 +97,7 @@ async def read_latest_notices():
     """Read the list of stored notice titles from the file."""
     print("📖 Attempting to read the stored notices from", LATEST_NOTICE_FILE)
     if not os.path.exists(LATEST_NOTICE_FILE):
-        print("ℹ️ No stored notice file found. Treating all first 5 fetched notices as new.")
+        print("ℹ️ No stored notice file found. Treating first 5 fetched notices as new.")
         return []
     try:
         with open(LATEST_NOTICE_FILE, "r", encoding="utf-8") as file:
@@ -255,15 +255,17 @@ async def main():
             new_notices = latest_notices[:STORED_NOTICE_LIMIT]
         else:
             print(f"🔎 Comparing first 5 fetched notices against first 5 stored titles...")
+            new_detected = False  # Flag to detect only the first new notice
             for i in range(STORED_NOTICE_LIMIT):
                 fetched_notice = latest_notices[i]
                 _, fetched_title, _ = fetched_notice
                 stored_title = stored_notice_titles[i] if i < len(stored_notice_titles) else ""
-                if fetched_title != stored_title:
+                if fetched_title != stored_title and not new_detected:
                     new_notices.append(fetched_notice)
                     print(f"🆕 Detected new notice at position {i+1}: '{fetched_title}' (Stored: '{stored_title}')")
+                    new_detected = True  # Stop after first mismatch
                 else:
-                    print(f"✅ Match at position {i+1}: '{fetched_title}'")
+                    print(f"✅ Match at position {i+1}: '{fetched_title}'" if fetched_title == stored_title else f"⚠️ Shifted match at position {i+1}: '{fetched_title}' (Stored: '{stored_title}')")
 
         if new_notices:
             print(f"🎉 Found {len(new_notices)} new notice(s)! Proceeding with notifications...")
