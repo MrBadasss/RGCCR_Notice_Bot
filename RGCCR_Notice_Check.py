@@ -118,8 +118,9 @@ async def write_latest_notices(latest_notices):
     print(f"💾 Preparing to update stored notices with {len(latest_notices)} entries")
     try:
         with open(LATEST_NOTICE_FILE, "w") as file:
-            # Keep only the most recent STORED_NOTICE_LIMIT notices
-            notices_to_store = latest_notices[-STORED_NOTICE_LIMIT:]
+            # Convert tuples to dictionaries for JSON serialization
+            notices_to_store = [{"date": date, "title": title, "link": link} 
+                              for date, title, link in latest_notices[-STORED_NOTICE_LIMIT:]]
             json.dump(notices_to_store, file)
         print(f"✅ Successfully updated {LATEST_NOTICE_FILE} with {len(notices_to_store)} recent notices")
     except Exception as e:
@@ -255,8 +256,8 @@ async def main():
                 notice_date, notice_title, notice_link = notice
                 is_new = True
                 for stored_notice in stored_notices:
-                    if (notice_date == stored_notice['date'] and 
-                        notice_link == stored_notice['link']):
+                    if (notice_date == stored_notice["date"] and 
+                        notice_link == stored_notice["link"]):
                         print(f"✅ Found match: Date '{notice_date}', Title '{notice_title}', Link '{notice_link}'")
                         is_new = False
                         break
