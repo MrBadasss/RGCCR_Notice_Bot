@@ -119,8 +119,10 @@ async def write_latest_notices(latest_notices):
     try:
         with open(LATEST_NOTICE_FILE, "w") as file:
             # Convert tuples to dictionaries for JSON serialization
-            notices_to_store = [{"date": date, "title": title, "link": link} 
-                              for date, title, link in latest_notices[-STORED_NOTICE_LIMIT:]]
+            notices_to_store = [
+                {"date": date, "title": title, "link": link}
+                for date, title, link in latest_notices[-STORED_NOTICE_LIMIT:]
+            ]
             json.dump(notices_to_store, file)
         print(f"✅ Successfully updated {LATEST_NOTICE_FILE} with {len(notices_to_store)} recent notices")
     except Exception as e:
