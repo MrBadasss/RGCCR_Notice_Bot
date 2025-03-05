@@ -97,29 +97,32 @@ async def read_latest_notices():
     """Read the list of stored notice titles from the file."""
     print("📖 Attempting to read the stored notices from", LATEST_NOTICE_FILE)
     if not os.path.exists(LATEST_NOTICE_FILE):
-        print("ℹ️ No stored notice file found. Treating all fetched notices as new.")
+        print("ℹ️ No stored notice file found. Treating all first 5 fetched notices as new.")
         return []
     try:
         with open(LATEST_NOTICE_FILE, "r", encoding="utf-8") as file:
             stored_titles = [line.strip() for line in file if line.strip()]
+            # Pad with empty strings if fewer than 5 titles
+            while len(stored_titles) < STORED_NOTICE_LIMIT:
+                stored_titles.append("")
             print(f"✅ Retrieved {len(stored_titles)} stored notice titles: {stored_titles}")
-            return stored_titles
+            return stored_titles[:STORED_NOTICE_LIMIT]  # Ensure exactly 5 titles
     except Exception as e:
         error_msg = f"❌ Failed to read stored notices from {LATEST_NOTICE_FILE}: {str(e)}"
         logging.error(error_msg)
         print(error_msg)
-        return []
+        return [""] * STORED_NOTICE_LIMIT  # Return 5 empty strings as fallback
 
 async def write_latest_notices(latest_notice_titles):
-    """Write the list of recent notice titles to the storage file, limited to STORED_NOTICE_LIMIT."""
-    print(f"💾 Preparing to update stored notices with {len(latest_notice_titles)} titles")
+    """Write the list of the first 5 notice titles to the storage file."""
+    print(f"💾 Preparing to update stored notices with titles from the first 5 notices")
     try:
         with open(LATEST_NOTICE_FILE, "w", encoding="utf-8") as file:
-            # Take the last STORED_NOTICE_LIMIT titles (assuming fetch order is newest first)
-            notices_to_store = latest_notice_titles[-STORED_NOTICE_LIMIT:]
+            # Take the first STORED_NOTICE_LIMIT titles (positionally first 5)
+            notices_to_store = latest_notice_titles[:STORED_NOTICE_LIMIT]
             for title in notices_to_store:
                 file.write(f"{title}\n")
-        print(f"✅ Successfully updated {LATEST_NOTICE_FILE} with {len(notices_to_store)} recent notice titles")
+        print(f"✅ Successfully updated {LATEST_NOTICE_FILE} with {len(notices_to_store)} notice titles")
     except Exception as e:
         error_msg = f"❌ Failed to write latest notices to {LATEST_NOTICE_FILE}: {str(e)}"
         logging.error(error_msg)
@@ -242,20 +245,25 @@ async def main():
         print("📋 Checking for previously stored notices...")
         stored_notice_titles = await read_latest_notices()
 
-        # Identify new notices by comparing with the stored titles
+        # Identify new notices by comparing the first 5 fetched with the first 5 stored
         new_notices = []
-        if not stored_notice_titles:
-            print("ℹ️ No previous notices stored. All fetched notices are considered new.")
+        if not latest_notices[:STORED_NOTICE_LIMIT]:  # If fewer than 5 notices fetched
+            print("ℹ️ Fewer than 5 notices fetched. Treating all as new.")
             new_notices = latest_notices
+        elif not stored_notice_titles:
+            print("ℹ️ No previous notices stored. Treating first 5 fetched notices as new.")
+            new_notices = latest_notices[:STORED_NOTICE_LIMIT]
         else:
-            print(f"🔎 Comparing {len(latest_notices)} fetched notices against {len(stored_notice_titles)} stored titles...")
-            for notice in latest_notices:
-                _, notice_title, _ = notice  # Unpack only the title for comparison
-                if notice_title not in stored_notice_titles:
-                    new_notices.append(notice)
-                    print(f"🆕 Detected new notice: '{notice_title}'")
+            print(f"🔎 Comparing first 5 fetched notices against first 5 stored titles...")
+            for i in range(STORED_NOTICE_LIMIT):
+                fetched_notice = latest_notices[i]
+                _, fetched_title, _ = fetched_notice
+                stored_title = stored_notice_titles[i] if i < len(stored_notice_titles) else ""
+                if fetched_title != stored_title:
+                    new_notices.append(fetched_notice)
+                    print(f"🆕 Detected new notice at position {i+1}: '{fetched_title}' (Stored: '{stored_title}')")
                 else:
-                    print(f"✅ Found match with stored title: '{notice_title}'")
+                    print(f"✅ Match at position {i+1}: '{fetched_title}'")
 
         if new_notices:
             print(f"🎉 Found {len(new_notices)} new notice(s)! Proceeding with notifications...")
@@ -263,9 +271,9 @@ async def main():
             await send_email(f"📢 RGCCR Notice Bot: {len(new_notices)} New Notice(s)", new_notices, email_receivers)
             # Send Telegram notifications with new notices
             await send_telegram_messages(new_notices, telegram_chat_ids)
-            # Update the stored notices with the latest titles
-            print("🔄 Updating the stored notices to the latest fetched notice titles...")
-            latest_notice_titles = [notice[1] for notice in latest_notices]  # Extract titles
+            # Update the stored notices with the titles of the first 5 fetched notices
+            print("🔄 Updating the stored notices to the titles of the first 5 fetched notices...")
+            latest_notice_titles = [notice[1] for notice in latest_notices[:STORED_NOTICE_LIMIT]]
             await write_latest_notices(latest_notice_titles)
             print("✅ Notice checking and notification process completed successfully!")
         else:
