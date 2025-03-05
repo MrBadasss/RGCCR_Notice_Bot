@@ -245,7 +245,7 @@ async def main():
         print("📋 Checking for previously stored notices...")
         stored_notice_titles = await read_latest_notices()
 
-        # Identify new notices by comparing the first 5 fetched with all stored titles
+        # Identify new notices by comparing the first NOTICE_LIMIT fetched with all stored titles
         new_notices = []
         if not latest_notices[:STORED_NOTICE_LIMIT]:  # If fewer than 5 notices fetched
             print("ℹ️ Fewer than 5 notices fetched. Treating all as new.")
@@ -254,9 +254,11 @@ async def main():
             print("ℹ️ No previous notices stored. Treating first 5 fetched notices as new.")
             new_notices = latest_notices[:STORED_NOTICE_LIMIT]
         else:
-            print(f"🔎 Comparing first 5 fetched notices against all 5 stored titles...")
-            match_position = STORED_NOTICE_LIMIT  # Default to end if no match
-            for i in range(STORED_NOTICE_LIMIT):
+            print(f"🔎 Comparing first {NOTICE_LIMIT} fetched notices against all 5 stored titles...")
+            match_position = NOTICE_LIMIT  # Default to end if no match
+            for i in range(NOTICE_LIMIT):  # Compare up to NOTICE_LIMIT (10)
+                if i >= len(latest_notices):  # Stop if fewer notices than NOTICE_LIMIT
+                    break
                 fetched_notice = latest_notices[i]
                 _, fetched_title, _ = fetched_notice
                 if fetched_title in stored_notice_titles:
@@ -264,15 +266,15 @@ async def main():
                     print(f"✅ Match found at position {i+1}: '{fetched_title}' in stored titles")
                     break
             # All notices from the start up to (but not including) the match position are new
-            if match_position == STORED_NOTICE_LIMIT:
-                print("ℹ️ No match found. Treating all first 5 fetched notices as new.")
-                new_notices = latest_notices[:STORED_NOTICE_LIMIT]
+            if match_position == NOTICE_LIMIT or match_position >= len(latest_notices):
+                print(f"ℹ️ No match found within {NOTICE_LIMIT} fetched notices. Treating all as new.")
+                new_notices = latest_notices[:NOTICE_LIMIT]  # Take all fetched notices up to 10
             else:
                 new_notices = latest_notices[:match_position]
-                for i in range(match_position, STORED_NOTICE_LIMIT):
+                for i in range(match_position, min(NOTICE_LIMIT, len(latest_notices))):
                     fetched_notice = latest_notices[i]
                     _, fetched_title, _ = fetched_notice
-                    stored_title = stored_notice_titles[i] if i < len(stored_notice_titles) else ""
+                    stored_title = stored_notice_titles[i % STORED_NOTICE_LIMIT] if i < len(stored_notice_titles) else ""
                     print(f"⚠️ Shifted match at position {i+1}: '{fetched_title}' (Stored: '{stored_title}')")
 
         if new_notices:
