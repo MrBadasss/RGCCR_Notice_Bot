@@ -84,7 +84,7 @@ async def fetch_latest_notices():
                     link_tag = cols[2].find("a")
                     link = link_tag["href"] if link_tag else "No link"
                     notices.append((date, title, link))
-                    print(f"✅ Added notice: {title} (Date: {date})")
+                    print(f"✅ Added notice: {title} (Date: {date}, Link: {link})")
                 print(f"✅ Successfully fetched {len(notices)} notices from the website.")
                 return notices
     except Exception as e:
@@ -94,35 +94,35 @@ async def fetch_latest_notices():
         return []
 
 async def read_latest_notices():
-    """Read the list of stored notice titles from the file."""
+    """Read the list of stored notice (title + url) combinations from the file."""
     print("📖 Attempting to read the stored notices from", LATEST_NOTICE_FILE)
     if not os.path.exists(LATEST_NOTICE_FILE):
         print("ℹ️ No stored notice file found. Treating first 5 fetched notices as new.")
         return []
     try:
         with open(LATEST_NOTICE_FILE, "r", encoding="utf-8") as file:
-            stored_titles = [line.strip() for line in file if line.strip()]
-            # Pad with empty strings if fewer than 5 titles
-            while len(stored_titles) < STORED_NOTICE_LIMIT:
-                stored_titles.append("")
-            print(f"✅ Retrieved {len(stored_titles)} stored notice titles: {stored_titles}")
-            return stored_titles[:STORED_NOTICE_LIMIT]  # Ensure exactly 5 titles
+            stored_notices = [line.strip() for line in file if line.strip()]
+            # Pad with empty strings if fewer than 5 notices
+            while len(stored_notices) < STORED_NOTICE_LIMIT:
+                stored_notices.append("")
+            print(f"✅ Retrieved {len(stored_notices)} stored notice combinations: {stored_notices}")
+            return stored_notices[:STORED_NOTICE_LIMIT]  # Ensure exactly 5 notices
     except Exception as e:
         error_msg = f"❌ Failed to read stored notices from {LATEST_NOTICE_FILE}: {str(e)}"
         logging.error(error_msg)
         print(error_msg)
         return [""] * STORED_NOTICE_LIMIT  # Return 5 empty strings as fallback
 
-async def write_latest_notices(latest_notice_titles):
-    """Write the list of the first 5 notice titles to the storage file."""
-    print(f"💾 Preparing to update stored notices with titles from the first 5 notices")
+async def write_latest_notices(latest_notice_combinations):
+    """Write the list of the first 5 notice (title + url) combinations to the storage file."""
+    print(f"💾 Preparing to update stored notices with (title + url) combinations from the first 5 notices")
     try:
         with open(LATEST_NOTICE_FILE, "w", encoding="utf-8") as file:
-            # Take the first STORED_NOTICE_LIMIT titles (positionally first 5)
-            notices_to_store = latest_notice_titles[:STORED_NOTICE_LIMIT]
-            for title in notices_to_store:
-                file.write(f"{title}\n")
-        print(f"✅ Successfully updated {LATEST_NOTICE_FILE} with {len(notices_to_store)} notice titles")
+            # Take the first STORED_NOTICE_LIMIT notice combinations (positionally first 5)
+            notices_to_store = latest_notice_combinations[:STORED_NOTICE_LIMIT]
+            for notice in notices_to_store:
+                file.write(f"{notice}\n")
+        print(f"✅ Successfully updated {LATEST_NOTICE_FILE} with {len(notices_to_store)} notice combinations")
     except Exception as e:
         error_msg = f"❌ Failed to write latest notices to {LATEST_NOTICE_FILE}: {str(e)}"
         logging.error(error_msg)
@@ -241,29 +241,30 @@ async def main():
             print("ℹ️ No notices were fetched from the website. Exiting script.")
             return
 
-        # Read the list of stored notice titles
+        # Read the list of stored notice (title + url) combinations
         print("📋 Checking for previously stored notices...")
-        stored_notice_titles = await read_latest_notices()
+        stored_notice_combinations = await read_latest_notices()
 
-        # Identify new notices by comparing the first NOTICE_LIMIT fetched with all stored titles
+        # Identify new notices by comparing the first NOTICE_LIMIT fetched with all stored combinations
         new_notices = []
         if not latest_notices[:STORED_NOTICE_LIMIT]:  # If fewer than 5 notices fetched
             print("ℹ️ Fewer than 5 notices fetched. Treating all as new.")
             new_notices = latest_notices
-        elif not stored_notice_titles:
+        elif not stored_notice_combinations:
             print("ℹ️ No previous notices stored. Treating first 5 fetched notices as new.")
             new_notices = latest_notices[:STORED_NOTICE_LIMIT]
         else:
-            print(f"🔎 Comparing first {NOTICE_LIMIT} fetched notices against all 5 stored titles...")
+            print(f"🔎 Comparing first {NOTICE_LIMIT} fetched notices against all 5 stored (title + url) combinations...")
             match_position = NOTICE_LIMIT  # Default to end if no match
             for i in range(NOTICE_LIMIT):  # Compare up to NOTICE_LIMIT (10)
                 if i >= len(latest_notices):  # Stop if fewer notices than NOTICE_LIMIT
                     break
                 fetched_notice = latest_notices[i]
-                _, fetched_title, _ = fetched_notice
-                if fetched_title in stored_notice_titles:
+                _, fetched_title, fetched_url = fetched_notice
+                fetched_combination = f"{fetched_title}|{fetched_url}"  # Combine title and URL
+                if fetched_combination in stored_notice_combinations:
                     match_position = i  # First position where a match is found
-                    print(f"✅ Match found at position {i+1}: '{fetched_title}' in stored titles")
+                    print(f"✅ Match found at position {i+1}: '{fetched_combination}' in stored combinations")
                     break
             # All notices from the start up to (but not including) the match position are new
             if match_position == NOTICE_LIMIT or match_position >= len(latest_notices):
@@ -273,9 +274,10 @@ async def main():
                 new_notices = latest_notices[:match_position]
                 for i in range(match_position, min(NOTICE_LIMIT, len(latest_notices))):
                     fetched_notice = latest_notices[i]
-                    _, fetched_title, _ = fetched_notice
-                    stored_title = stored_notice_titles[i % STORED_NOTICE_LIMIT] if i < len(stored_notice_titles) else ""
-                    print(f"⚠️ Shifted match at position {i+1}: '{fetched_title}' (Stored: '{stored_title}')")
+                    _, fetched_title, fetched_url = fetched_notice
+                    fetched_combination = f"{fetched_title}|{fetched_url}"
+                    stored_combination = stored_notice_combinations[i % STORED_NOTICE_LIMIT] if i < len(stored_notice_combinations) else ""
+                    print(f"⚠️ Shifted match at position {i+1}: '{fetched_combination}' (Stored: '{stored_combination}')")
 
         if new_notices:
             print(f"🎉 Found {len(new_notices)} new notice(s)! Proceeding with notifications...")
@@ -283,10 +285,10 @@ async def main():
             await send_email(f"📢 RGCCR Notice Bot: {len(new_notices)} New Notice(s)", new_notices, email_receivers)
             # Send Telegram notifications with new notices
             await send_telegram_messages(new_notices, telegram_chat_ids)
-            # Update the stored notices with the titles of the first 5 fetched notices
-            print("🔄 Updating the stored notices to the titles of the first 5 fetched notices...")
-            latest_notice_titles = [notice[1] for notice in latest_notices[:STORED_NOTICE_LIMIT]]
-            await write_latest_notices(latest_notice_titles)
+            # Update the stored notices with the (title + url) combinations of the first 5 fetched notices
+            print("🔄 Updating the stored notices to the (title + url) combinations of the first 5 fetched notices...")
+            latest_notice_combinations = [f"{notice[1]}|{notice[2]}" for notice in latest_notices[:STORED_NOTICE_LIMIT]]
+            await write_latest_notices(latest_notice_combinations)
             print("✅ Notice checking and notification process completed successfully!")
         else:
             print("ℹ️ No new notices detected since the last check.")
